@@ -258,7 +258,6 @@ static void parse_ps(const char *out) {
             /* Next token after processor is the CONTEXT (numeric) */
             int ctx_idx = proc_idx + 1;
             if (ctx_idx < n) {
-                /* Context is typically a number (e.g., 16384) */
                 snprintf(st.running[cnt].context, MAX_CONTEXT_LEN, "%s", tok[ctx_idx]);
             } else {
                 snprintf(st.running[cnt].context, MAX_CONTEXT_LEN, "?");
@@ -282,7 +281,6 @@ static void parse_ps(const char *out) {
                     strncat(proc_buf, " ", sizeof(proc_buf) - strlen(proc_buf) - 1);
                     strncat(proc_buf, tok[4], sizeof(proc_buf) - strlen(proc_buf) - 1);
                     snprintf(st.running[cnt].proc, MAX_PROC_LEN, "%s", proc_buf);
-                    /* No context in older output */
                     snprintf(st.running[cnt].context, MAX_CONTEXT_LEN, "N/A");
                     char exp_buf[MAX_DATE_LEN] = "";
                     for (int i = 5; i < n; i++) {
@@ -828,7 +826,10 @@ static void draw_pull_dialog(void) {
     int cursor_pos = strlen(st.dialog_input);
     if (cursor_pos >= field_width - 1)
         cursor_pos = field_width - 1;
-    mvaddch(sy + 2, field_start + cursor_pos, '_');
+    /* Block cursor: reverse video space */
+    attron(A_REVERSE);
+    mvaddch(sy + 2, field_start + cursor_pos, ' ');
+    attroff(A_REVERSE);
     attroff(COLOR_PAIR(CP_ACCENT));
 
     attron(COLOR_PAIR(CP_ACCENT));
@@ -877,7 +878,10 @@ static void draw_search_dialog(void) {
     int cursor_pos = strlen(st.dialog_input);
     if (cursor_pos >= field_width - 1)
         cursor_pos = field_width - 1;
-    mvaddch(sy + 2, field_start + cursor_pos, '_');
+    /* Block cursor: reverse video space */
+    attron(A_REVERSE);
+    mvaddch(sy + 2, field_start + cursor_pos, ' ');
+    attroff(A_REVERSE);
     attroff(COLOR_PAIR(CP_ACCENT));
 
     attron(COLOR_PAIR(CP_ACCENT));
