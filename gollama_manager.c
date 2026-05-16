@@ -37,7 +37,7 @@
 #define MAX_PROC_LEN    64
 #define MAX_CONTEXT_LEN 16
 #define MAX_LINE_LEN    1024
-#define MAX_LOG_LEN     256
+#define MAX_LOG_LEN     512
 #define MIN_COL_PAD     2
 #define MAX_COL_WIDTH   40
 
@@ -410,8 +410,10 @@ static void refresh_data(void) {
  * -------------------------------------------------------------------------- */
 static void remove_model(const char *name) {
     char cmd[MAX_LINE_LEN];
-    char output[512];
+    char output[MAX_LOG_LEN - 32];
+
     snprintf(cmd, sizeof(cmd), "ollama rm %s 2>&1", name);
+
     int ret = run_cmd(cmd, output, sizeof(output));
     if (ret == 0) {
         snprintf(st.logmsg, sizeof(st.logmsg), "Removed model: %s", name);
@@ -427,8 +429,10 @@ static void remove_model(const char *name) {
 
 static void stop_model(const char *name) {
     char cmd[MAX_LINE_LEN];
-    char output[512];
+    char output[MAX_LOG_LEN - 32];
+
     snprintf(cmd, sizeof(cmd), "ollama stop %s 2>&1", name);
+
     int ret = run_cmd(cmd, output, sizeof(output));
     if (ret == 0) {
         snprintf(st.logmsg, sizeof(st.logmsg), "Stopped model: %s", name);
@@ -1022,17 +1026,18 @@ int main(void) {
                     char cmd[MAX_LINE_LEN];
                     snprintf(cmd, sizeof(cmd), "ollama pull %s", st.dialog_input);
                     printf("\n");
-                    printf("+----------------------------------------------------------------------+\n");
-                    printf("|                         PULLING MODEL                                |\n");
-                    printf("+----------------------------------------------------------------------+\n\n");
-                    printf("Model: %s\n", st.dialog_input);
-                    printf("------------------------------------------------------------------------\n\n");
+                    printf("┌─────────────────────────────────────────────────────────────────────┐\n");
+                    printf("│                            PULLING MODEL                            │\n");
+                    printf("└─────────────────────────────────────────────────────────────────────┘\n");
+                    printf("\n");
+                    printf(" Model: %s\n", st.dialog_input);
+                    printf("───────────────────────────────────────────────────────────────────────\n");
+                    printf("\n");
+                    printf("\n");
+                    printf("───────────────────────────────────────────────────────────────────────\n");
                     fflush(stdout);
 
                     int ret = system(cmd);
-                    printf("\n");
-                    printf("------------------------------------------------------------------------\n");
-
                     if (ret == 0)
                         printf("[SUCCESS] Model '%s' pulled successfully.\n", st.dialog_input);
                     else
