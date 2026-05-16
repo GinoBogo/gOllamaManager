@@ -14,6 +14,10 @@ A terminal-based user interface (TUI) for managing Ollama models. Built with C a
 - **Background Refresh**: Automatic data refresh in a background thread
 - **Color-coded UI**: Easy-to-read interface with color highlighting
 
+![Figure 01](./docs/images/Figure_01.png)
+
+![Figure 02](./docs/images/Figure_02.png)
+
 ## Requirements
 
 - Linux operating system
@@ -118,19 +122,6 @@ gollama_manager
 
 ```bash
 ./rebuild.sh release
-```
-
-## Project Structure
-
-```
-gOllamaManager/
-├── CMakeLists.txt          # CMake build configuration
-├── gollama_manager.c       # Main source code
-├── build.sh                # Build script
-├── clean.sh                # Clean script
-├── rebuild.sh              # Rebuild script
-├── README.md               # This file
-└── build/                  # Build output directory
 ```
 
 ## Technical Details
