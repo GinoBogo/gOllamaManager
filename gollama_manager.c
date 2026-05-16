@@ -29,16 +29,17 @@
 /* -----------------------------------------------------------------------------
  * Constants
  * -------------------------------------------------------------------------- */
-#define MAX_MODELS    256
-#define MAX_NAME_LEN  128
-#define MAX_ID_LEN    64
-#define MAX_SIZE_LEN  32
-#define MAX_DATE_LEN  64
-#define MAX_PROC_LEN  64
-#define MAX_LINE_LEN  1024
-#define MAX_LOG_LEN   256
-#define MIN_COL_PAD   2
-#define MAX_COL_WIDTH 40
+#define MAX_MODELS      256
+#define MAX_NAME_LEN    128
+#define MAX_ID_LEN      64
+#define MAX_SIZE_LEN    32
+#define MAX_DATE_LEN    64
+#define MAX_PROC_LEN    64
+#define MAX_CONTEXT_LEN 16
+#define MAX_LINE_LEN    1024
+#define MAX_LOG_LEN     256
+#define MIN_COL_PAD     2
+#define MAX_COL_WIDTH   40
 
 /* -----------------------------------------------------------------------------
  * ncurses Color Pairs
@@ -73,6 +74,7 @@ typedef struct {
     char id[MAX_ID_LEN];
     char size[MAX_SIZE_LEN];
     char proc[MAX_PROC_LEN];
+    char context[MAX_CONTEXT_LEN];
     char expires[MAX_DATE_LEN];
 } Running;
 
@@ -102,7 +104,7 @@ static struct {
 
     /* Dynamic column widths */
     int col_name, col_id, col_size, col_date;
-    int rcol_name, rcol_id, rcol_size, rcol_proc, rcol_exp;
+    int rcol_name, rcol_id, rcol_size, rcol_proc, rcol_ctx, rcol_exp;
 } st;
 
 static int rows, cols; /* terminal dimensions */
@@ -138,21 +140,17 @@ static int run_cmd(const char *cmd, char *out, size_t sz) {
 static void parse_list(const char *out) {
     char work[16384];
     snprintf(work, sizeof(work), "%s", out);
-
     char *line = strtok(work, "\n");
     int   ln = 0, cnt = 0;
-
     while (line && cnt < MAX_MODELS) {
         if (ln++ == 0) {
             line = strtok(NULL, "\n");
             continue;
         }
-
         char *tok[20];
         int   n = 0;
         char *save;
         char *p = strtok_r(line, " \t", &save);
-
         while (p && n < 20) {
             tok[n++] = p;
             p        = strtok_r(NULL, " \t", &save);
@@ -224,7 +222,7 @@ static void parse_ps(const char *out) {
             tok[n++] = p;
             p        = strtok_r(NULL, " \t", &save);
         }
-        if (n < 4) {
+        if (n < 5) { /* NAME, ID, SIZE, PROCESSOR%, CONTEXT, EXPIRES... */
             line = strtok(NULL, "\n");
             continue;
         }
@@ -232,7 +230,7 @@ static void parse_ps(const char *out) {
         snprintf(st.running[cnt].name, MAX_NAME_LEN, "%s", tok[0]);
         snprintf(st.running[cnt].id, MAX_ID_LEN, "%s", tok[1]);
 
-        /* Processor field contains '%' */
+        /* Find the processor field (contains '%') */
         int proc_idx = -1;
         for (int i = 2; i < n; i++) {
             if (strchr(tok[i], '%')) {
@@ -240,32 +238,71 @@ static void parse_ps(const char *out) {
                 break;
             }
         }
-        if (proc_idx >= 3 && proc_idx <= n) {
+
+        if (proc_idx >= 3 && proc_idx + 2 < n) {
             /* Size = two tokens before processor */
             char size_buf[MAX_SIZE_LEN] = "";
             snprintf(size_buf, sizeof(size_buf), "%s %s", tok[proc_idx - 2], tok[proc_idx - 1]);
             snprintf(st.running[cnt].size, MAX_SIZE_LEN, "%s", size_buf);
-            snprintf(st.running[cnt].proc, MAX_PROC_LEN, "%s", tok[proc_idx]);
-            /* Expires = rest after processor */
+
+            /* Processor: percentage + next token if it's CPU/GPU */
+            char proc_buf[MAX_PROC_LEN] = "";
+            snprintf(proc_buf, sizeof(proc_buf), "%s", tok[proc_idx]);
+            if (proc_idx + 1 < n && (strcasecmp(tok[proc_idx + 1], "CPU") == 0 || strcasecmp(tok[proc_idx + 1], "GPU") == 0)) {
+                strncat(proc_buf, " ", sizeof(proc_buf) - strlen(proc_buf) - 1);
+                strncat(proc_buf, tok[proc_idx + 1], sizeof(proc_buf) - strlen(proc_buf) - 1);
+                proc_idx++; /* skip the CPU/GPU token */
+            }
+            snprintf(st.running[cnt].proc, MAX_PROC_LEN, "%s", proc_buf);
+
+            /* Next token after processor is the CONTEXT (numeric) */
+            int ctx_idx = proc_idx + 1;
+            if (ctx_idx < n) {
+                /* Context is typically a number (e.g., 16384) */
+                snprintf(st.running[cnt].context, MAX_CONTEXT_LEN, "%s", tok[ctx_idx]);
+            } else {
+                snprintf(st.running[cnt].context, MAX_CONTEXT_LEN, "?");
+            }
+
+            /* Expires = all remaining tokens after context */
             char exp_buf[MAX_DATE_LEN] = "";
-            for (int i = proc_idx + 1; i < n; i++) {
-                if (i > proc_idx + 1)
+            for (int i = ctx_idx + 1; i < n; i++) {
+                if (i > ctx_idx + 1)
                     strcat(exp_buf, " ");
                 strcat(exp_buf, tok[i]);
             }
             snprintf(st.running[cnt].expires, MAX_DATE_LEN, "%s", exp_buf);
         } else {
-            /* Fallback: size = tok[2], processor = tok[3], expires = tok[4..] */
+            /* Fallback for older ollama ps output (without CONTEXT) */
             snprintf(st.running[cnt].size, MAX_SIZE_LEN, "%s", tok[2]);
-            if (n >= 4)
-                snprintf(st.running[cnt].proc, MAX_PROC_LEN, "%s", tok[3]);
-            char exp_buf[MAX_DATE_LEN] = "";
-            for (int i = 4; i < n; i++) {
-                if (i > 4)
-                    strcat(exp_buf, " ");
-                strcat(exp_buf, tok[i]);
+            if (n >= 4) {
+                char proc_buf[MAX_PROC_LEN] = "";
+                snprintf(proc_buf, sizeof(proc_buf), "%s", tok[3]);
+                if (n >= 5 && (strcasecmp(tok[4], "CPU") == 0 || strcasecmp(tok[4], "GPU") == 0)) {
+                    strncat(proc_buf, " ", sizeof(proc_buf) - strlen(proc_buf) - 1);
+                    strncat(proc_buf, tok[4], sizeof(proc_buf) - strlen(proc_buf) - 1);
+                    snprintf(st.running[cnt].proc, MAX_PROC_LEN, "%s", proc_buf);
+                    /* No context in older output */
+                    snprintf(st.running[cnt].context, MAX_CONTEXT_LEN, "N/A");
+                    char exp_buf[MAX_DATE_LEN] = "";
+                    for (int i = 5; i < n; i++) {
+                        if (i > 5)
+                            strcat(exp_buf, " ");
+                        strcat(exp_buf, tok[i]);
+                    }
+                    snprintf(st.running[cnt].expires, MAX_DATE_LEN, "%s", exp_buf);
+                } else {
+                    snprintf(st.running[cnt].proc, MAX_PROC_LEN, "%s", tok[3]);
+                    snprintf(st.running[cnt].context, MAX_CONTEXT_LEN, "N/A");
+                    char exp_buf[MAX_DATE_LEN] = "";
+                    for (int i = 4; i < n; i++) {
+                        if (i > 4)
+                            strcat(exp_buf, " ");
+                        strcat(exp_buf, tok[i]);
+                    }
+                    snprintf(st.running[cnt].expires, MAX_DATE_LEN, "%s", exp_buf);
+                }
             }
-            snprintf(st.running[cnt].expires, MAX_DATE_LEN, "%s", exp_buf);
         }
         cnt++;
         line = strtok(NULL, "\n");
@@ -309,10 +346,12 @@ static void compute_widths(void) {
     st.col_size = w_size + MIN_COL_PAD;
     st.col_date = w_date + MIN_COL_PAD;
 
+    /* Running tab columns */
     w_name     = strlen("MODEL NAME");
     w_id       = strlen("ID");
     w_size     = strlen("SIZE");
     int w_proc = strlen("PROCESSOR");
+    int w_ctx  = strlen("CONTEXT");
     int w_exp  = strlen("EXPIRES");
     for (int i = 0; i < st.running_cnt; i++) {
         int l = strlen(st.running[i].name);
@@ -327,6 +366,9 @@ static void compute_widths(void) {
         l = strlen(st.running[i].proc);
         if (l > w_proc)
             w_proc = l;
+        l = strlen(st.running[i].context);
+        if (l > w_ctx)
+            w_ctx = l;
         l = strlen(st.running[i].expires);
         if (l > w_exp)
             w_exp = l;
@@ -339,12 +381,15 @@ static void compute_widths(void) {
         w_size = MAX_COL_WIDTH;
     if (w_proc > MAX_COL_WIDTH)
         w_proc = MAX_COL_WIDTH;
+    if (w_ctx > MAX_COL_WIDTH)
+        w_ctx = MAX_COL_WIDTH;
     if (w_exp > MAX_COL_WIDTH)
         w_exp = MAX_COL_WIDTH;
     st.rcol_name = w_name + MIN_COL_PAD;
     st.rcol_id   = w_id + MIN_COL_PAD;
     st.rcol_size = w_size + MIN_COL_PAD;
     st.rcol_proc = w_proc + MIN_COL_PAD;
+    st.rcol_ctx  = w_ctx + MIN_COL_PAD;
     st.rcol_exp  = w_exp + MIN_COL_PAD;
 }
 
@@ -374,7 +419,6 @@ static void remove_model(const char *name) {
         snprintf(st.logmsg, sizeof(st.logmsg), "Removed model: %s", name);
         snprintf(st.status, sizeof(st.status), "Model removed");
     } else {
-        /* Remove trailing newline */
         size_t len = strlen(output);
         if (len > 0 && output[len - 1] == '\n')
             output[len - 1] = '\0';
@@ -415,7 +459,7 @@ static void init_ncurses(void) {
     cbreak();
     noecho();
     keypad(stdscr, TRUE);
-    timeout(100); /* non‑blocking getch with 100ms timeout */
+    timeout(100);
     curs_set(0);
     if (has_colors()) {
         start_color();
@@ -558,7 +602,6 @@ static void draw_model_list(void) {
     int x_size  = x_id + st.col_id;
     int x_date  = x_size + st.col_size;
 
-    /* Clear the list area */
     for (int i = yh; i <= ylist + maxrows; i++) {
         move(i, 2);
         clrtoeol();
@@ -626,7 +669,8 @@ static void draw_running_list(void) {
     int x_id    = x_name + st.rcol_name;
     int x_size  = x_id + st.rcol_id;
     int x_proc  = x_size + st.rcol_size;
-    int x_exp   = x_proc + st.rcol_proc;
+    int x_ctx   = x_proc + st.rcol_proc;
+    int x_exp   = x_ctx + st.rcol_ctx;
 
     for (int i = yh; i <= ylist + maxrows; i++) {
         move(i, 2);
@@ -638,6 +682,7 @@ static void draw_running_list(void) {
     mvprintw(yh, x_id, "ID");
     mvprintw(yh, x_size, "SIZE");
     mvprintw(yh, x_proc, "PROCESSOR");
+    mvprintw(yh, x_ctx, "CONTEXT");
     mvprintw(yh, x_exp, "EXPIRES");
     attroff(A_BOLD | COLOR_PAIR(CP_ACCENT));
 
@@ -659,6 +704,7 @@ static void draw_running_list(void) {
         mvprintw(row, x_id, "%-*.*s", st.rcol_id - 1, st.rcol_id - 1, st.running[i].id);
         mvprintw(row, x_size, "%-*.*s", st.rcol_size - 1, st.rcol_size - 1, st.running[i].size);
         mvprintw(row, x_proc, "%-*.*s", st.rcol_proc - 1, st.rcol_proc - 1, st.running[i].proc);
+        mvprintw(row, x_ctx, "%-*.*s", st.rcol_ctx - 1, st.rcol_ctx - 1, st.running[i].context);
         mvprintw(row, x_exp, "%-*.*s", st.rcol_exp - 1, st.rcol_exp - 1, st.running[i].expires);
 
         attroff(COLOR_PAIR(CP_SELECTED) | COLOR_PAIR(CP_DEFAULT));
@@ -939,7 +985,6 @@ int main(void) {
     int       ch;
 
     while (1) {
-        /* Background refresh finished */
         if (st.need_refresh) {
             snprintf(st.status, sizeof(st.status), "Refreshed");
             snprintf(st.logmsg, sizeof(st.logmsg), "Loaded %d model(s), %d running", st.model_cnt, st.running_cnt);
@@ -947,7 +992,6 @@ int main(void) {
             st.need_refresh = 0;
         }
 
-        /* Model information dialog (non‑modal) */
         if (st.show_info) {
             ch = getch();
             if (ch != ERR) {
@@ -957,7 +1001,6 @@ int main(void) {
             continue;
         }
 
-        /* Pull model dialog */
         if (st.show_dialog) {
             ch = getch();
             if (ch == 27) {
@@ -1023,7 +1066,6 @@ int main(void) {
             continue;
         }
 
-        /* Search dialog */
         if (st.show_search) {
             ch = getch();
             if (ch == 27) {
@@ -1060,7 +1102,6 @@ int main(void) {
             continue;
         }
 
-        /* Confirmation dialog (Delete / Stop) */
         if (st.confirm_active) {
             ch = getch();
             if (ch == 27) {
@@ -1104,7 +1145,6 @@ int main(void) {
             continue;
         }
 
-        /* Normal keyboard input */
         ch = getch();
         if (ch == ERR)
             continue;
@@ -1278,7 +1318,3 @@ int main(void) {
     cleanup();
     return 0;
 }
-
-/* *****************************************************************************
-End of File
-*/
