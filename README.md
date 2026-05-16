@@ -1,6 +1,6 @@
 # gOllamaManager
 
-A terminal-based user interface (TUI) for managing Ollama models. Built with C and ncurses, gOllamaManager provides an intuitive console interface to view, pull, delete, and manage your Ollama models.
+A terminal-based user interface (TUI) for managing Ollama models. Built with C and ncurses, gOllamaManager provides an intuitive console interface to view, pull, delete, and manage your Ollama models. This tool was created specifically to manage LLM models on a remote Linux server running Ollama by means of SSH tunneling.
 
 ## Features
 
@@ -17,6 +17,8 @@ A terminal-based user interface (TUI) for managing Ollama models. Built with C a
 ![Figure 01](./docs/images/Figure_01.png)
 
 ![Figure 02](./docs/images/Figure_02.png)
+
+![Figure 03](./docs/images/Figure_03.png)
 
 ## Requirements
 
