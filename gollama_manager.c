@@ -177,21 +177,25 @@ static void parse_list(const char *out) {
             line = strtok(NULL, "\n");
             continue;
         }
+
         char *tok[20];
         int   n = 0;
         char *save;
         char *p = strtok_r(line, " \t", &save);
+
         while (p && n < 20) {
             tok[n++] = p;
             p        = strtok_r(NULL, " \t", &save);
         }
+
         if (n < 3) {
             line = strtok(NULL, "\n");
             continue;
         }
-
+        // clang-format off
         snprintf(st.models[cnt].name, MAX_NAME_LEN, "%s", tok[0]);
-        snprintf(st.models[cnt].id, MAX_ID_LEN, "%s", tok[1]);
+        snprintf(st.models[cnt].id  , MAX_ID_LEN  , "%s", tok[1]);
+        // clang-format on
 
         /* Locate the date field (contains "ago", "day", "hour", "minute") */
         int date_start = n;
@@ -268,9 +272,10 @@ static void parse_ps(const char *out) {
             line = strtok(NULL, "\n");
             continue;
         }
-
+        // clang-format off
         snprintf(st.running[cnt].name, MAX_NAME_LEN, "%s", tok[0]);
-        snprintf(st.running[cnt].id, MAX_ID_LEN, "%s", tok[1]);
+        snprintf(st.running[cnt].id  , MAX_ID_LEN  , "%s", tok[1]);
+        // clang-format on
 
         /* Find the processor field (contains '%') */
         int proc_idx = -1;
@@ -284,17 +289,22 @@ static void parse_ps(const char *out) {
         if (proc_idx >= 3 && proc_idx + 2 < n) {
             /* Size = two tokens before processor */
             char size_buf[MAX_SIZE_LEN] = "";
-            snprintf(size_buf, sizeof(size_buf), "%s %s", tok[proc_idx - 2], tok[proc_idx - 1]);
-            snprintf(st.running[cnt].size, MAX_SIZE_LEN, "%s", size_buf);
+            // clang-format off
+            snprintf(size_buf            , sizeof(size_buf), "%s %s", tok[proc_idx - 2], tok[proc_idx - 1]);
+            snprintf(st.running[cnt].size, MAX_SIZE_LEN    , "%s"   , size_buf);
+            // clang-format on
 
             /* Processor: percentage + next token if it's CPU/GPU */
             char proc_buf[MAX_PROC_LEN] = "";
             snprintf(proc_buf, sizeof(proc_buf), "%s", tok[proc_idx]);
+
             if (proc_idx + 1 < n &&                           //
                 (strcasecmp(tok[proc_idx + 1], "CPU") == 0 || //
                  strcasecmp(tok[proc_idx + 1], "GPU") == 0)) {
-                strncat(proc_buf, " ", sizeof(proc_buf) - strlen(proc_buf) - 1);
+                // clang-format off
+                strncat(proc_buf, " "              , sizeof(proc_buf) - strlen(proc_buf) - 1);
                 strncat(proc_buf, tok[proc_idx + 1], sizeof(proc_buf) - strlen(proc_buf) - 1);
+                // clang-format on
                 proc_idx++; /* skip the CPU/GPU token */
             }
             snprintf(st.running[cnt].proc, MAX_PROC_LEN, "%s", proc_buf);
@@ -322,13 +332,17 @@ static void parse_ps(const char *out) {
             if (n >= 4) {
                 char proc_buf[MAX_PROC_LEN] = "";
                 snprintf(proc_buf, sizeof(proc_buf), "%s", tok[3]);
+
                 if (n >= 5 &&                          //
                     (strcasecmp(tok[4], "CPU") == 0 || //
                      strcasecmp(tok[4], "GPU") == 0)) {
-                    strncat(proc_buf, " ", sizeof(proc_buf) - strlen(proc_buf) - 1);
+                    // clang-format off
+                    strncat(proc_buf, " "   , sizeof(proc_buf) - strlen(proc_buf) - 1);
                     strncat(proc_buf, tok[4], sizeof(proc_buf) - strlen(proc_buf) - 1);
-                    snprintf(st.running[cnt].proc, MAX_PROC_LEN, "%s", proc_buf);
+
+                    snprintf(st.running[cnt].proc   , MAX_PROC_LEN   , "%s", proc_buf);
                     snprintf(st.running[cnt].context, MAX_CONTEXT_LEN, "N/A");
+                    // clang-format on
 
                     char exp_buf[MAX_DATE_LEN] = "";
                     for (int i = 5; i < n; i++) {
@@ -339,8 +353,10 @@ static void parse_ps(const char *out) {
                     }
                     snprintf(st.running[cnt].expires, MAX_DATE_LEN, "%s", exp_buf);
                 } else {
-                    snprintf(st.running[cnt].proc, MAX_PROC_LEN, "%s", tok[3]);
+                    // clang-format off
+                    snprintf(st.running[cnt].proc   , MAX_PROC_LEN   , "%s", tok[3]);
                     snprintf(st.running[cnt].context, MAX_CONTEXT_LEN, "N/A");
+                    // clang-format on
 
                     char exp_buf[MAX_DATE_LEN] = "";
                     for (int i = 4; i < n; i++) {
@@ -1051,7 +1067,8 @@ static void draw_search_dialog(void) {
  */
 static void draw_confirm_dialog(void) {
     int w = 50, h = 6;
-    int sy = (rows - h) / 2, sx = (cols - w) / 2;
+    int sy = (rows - h) / 2;
+    int sx = (cols - w) / 2;
 
     attron(COLOR_PAIR(CP_DIALOG));
     for (int i = 0; i < h; i++)
@@ -1059,14 +1076,16 @@ static void draw_confirm_dialog(void) {
     attroff(COLOR_PAIR(CP_DIALOG));
 
     attron(COLOR_PAIR(CP_DIALOG_BORDER));
-    for (int i = 0; i < w; i++) mvaddch(sy, sx + i, ACS_HLINE);
-    for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i, ACS_HLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i, sx, ACS_VLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i, sx + w - 1, ACS_VLINE);
-    mvaddch(sy, sx, ACS_ULCORNER);
-    mvaddch(sy, sx + w - 1, ACS_URCORNER);
-    mvaddch(sy + h - 1, sx, ACS_LLCORNER);
-    mvaddch(sy + h - 1, sx + w - 1, ACS_LRCORNER);
+    // clang-format off
+    for (int i = 0; i < w; i++) mvaddch(sy        , sx + i    , ACS_HLINE);
+    for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i    , ACS_HLINE);
+    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx        , ACS_VLINE);
+    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx + w - 1, ACS_VLINE);
+    mvaddch(sy         , sx        , ACS_ULCORNER);
+    mvaddch(sy         , sx + w - 1, ACS_URCORNER);
+    mvaddch(sy + h - 1 , sx        , ACS_LLCORNER);
+    mvaddch(sy + h - 1 , sx + w - 1, ACS_LRCORNER);
+    // clang-format on
     attroff(COLOR_PAIR(CP_DIALOG_BORDER));
 
     attron(COLOR_PAIR(CP_DEFAULT));
@@ -1077,6 +1096,7 @@ static void draw_confirm_dialog(void) {
 
     int btn_ok_x     = sx + w / 2 - 12;
     int btn_cancel_x = sx + w / 2 + 2;
+
     attron(COLOR_PAIR(CP_ACCENT) | A_BOLD);
     if (st.confirm_choice == 1) {
         attron(A_REVERSE);
@@ -1163,10 +1183,10 @@ int main(void) {
 
     while (1) {
         if (st.need_refresh) {
+            st.need_refresh = 0;
             snprintf(st.status, sizeof(st.status), "Refreshed");
             snprintf(st.logmsg, sizeof(st.logmsg), "Loaded %d model(s), %d running", st.model_cnt, st.running_cnt);
             full_refresh();
-            st.need_refresh = 0;
         }
 
         if (st.show_info) {
@@ -1286,12 +1306,12 @@ int main(void) {
             }
             switch (ch) {
                 case KEY_LEFT:
-                    st.confirm_choice = 0;
+                    st.confirm_choice = 1;
                     draw_confirm_dialog();
                     refresh();
                     break;
                 case KEY_RIGHT:
-                    st.confirm_choice = 1;
+                    st.confirm_choice = 0;
                     draw_confirm_dialog();
                     refresh();
                     break;
