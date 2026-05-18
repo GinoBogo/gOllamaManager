@@ -992,9 +992,16 @@ static void draw_info_dialog(void) {
 }
 
 /**
- * @brief Draw the pull model dialog with text input.
+ * @brief Draw a generic text-input dialog with a title and a footer hint.
+ *
+ * Renders the shared chrome (box, "Model:" label, input field, block cursor)
+ * used by both the pull and search dialogs.  Only the title centred on row 1
+ * and the hint centred on row 4 differ between the two callers.
+ *
+ * @param[in] title Null-terminated title string (including surrounding spaces).
+ * @param[in] hint  Null-terminated footer hint string.
  */
-static void draw_pull_dialog(void) {
+static void draw_input_dialog(const char *title, const char *hint) {
     int w  = 64;
     int h  = 6;
     int sy = (rows - h) / 2;
@@ -1003,7 +1010,7 @@ static void draw_pull_dialog(void) {
     draw_dialog_box(w, h, sy, sx);
 
     attron(COLOR_PAIR(CP_HEADER) | A_BOLD);
-    mvprintw(sy + 1, sx + (w - 12) / 2, " PULL MODEL ");
+    mvprintw(sy + 1, sx + (w - (int)strlen(title)) / 2, "%s", title);
     attroff(A_BOLD | COLOR_PAIR(CP_HEADER));
 
     attron(COLOR_PAIR(CP_DIALOG));
@@ -1020,7 +1027,7 @@ static void draw_pull_dialog(void) {
     }
     mvprintw(sy + 2, field_start, "%-*.*s", field_width - 1, field_width - 1, st.dialog_input);
 
-    int cursor_pos = strlen(st.dialog_input);
+    int cursor_pos = (int)strlen(st.dialog_input);
     if (cursor_pos >= field_width - 1) {
         cursor_pos = field_width - 1;
     }
@@ -1032,59 +1039,23 @@ static void draw_pull_dialog(void) {
     attroff(COLOR_PAIR(CP_ACCENT));
 
     attron(COLOR_PAIR(CP_ACCENT));
-    const char *msg     = " Press ENTER to pull, ESC to cancel ";
-    int         msg_len = strlen(msg);
-    int         msg_x   = sx + (w - msg_len) / 2;
-    mvprintw(sy + 4, msg_x, "%s", msg);
+    int hint_len = (int)strlen(hint);
+    mvprintw(sy + 4, sx + (w - hint_len) / 2, "%s", hint);
     attroff(COLOR_PAIR(CP_ACCENT));
+}
+
+/**
+ * @brief Draw the pull model dialog with text input.
+ */
+static void draw_pull_dialog(void) {
+    draw_input_dialog(" PULL MODEL ", " Press ENTER to pull, ESC to cancel ");
 }
 
 /**
  * @brief Draw the search dialog with text input.
  */
 static void draw_search_dialog(void) {
-    int w  = 64;
-    int h  = 6;
-    int sy = (rows - h) / 2;
-    int sx = (cols - w) / 2;
-
-    draw_dialog_box(w, h, sy, sx);
-
-    attron(COLOR_PAIR(CP_HEADER) | A_BOLD);
-    mvprintw(sy + 1, sx + (w - 12) / 2, " SEARCH MODEL ");
-    attroff(A_BOLD | COLOR_PAIR(CP_HEADER));
-
-    attron(COLOR_PAIR(CP_DIALOG));
-    mvprintw(sy + 2, sx + 3, "Model:");
-    attroff(COLOR_PAIR(CP_DIALOG));
-
-    int field_xpad  = 10;
-    int field_start = sx + field_xpad;
-    int field_width = w - (2 * field_xpad);
-
-    attron(COLOR_PAIR(CP_ACCENT));
-    for (int i = 0; i < field_width; i++) {
-        mvaddch(sy + 2, field_start + i, ' ');
-    }
-    mvprintw(sy + 2, field_start, "%-*.*s", field_width - 1, field_width - 1, st.dialog_input);
-
-    int cursor_pos = strlen(st.dialog_input);
-    if (cursor_pos >= field_width - 1) {
-        cursor_pos = field_width - 1;
-    }
-
-    /* Block cursor: reverse video space */
-    attron(A_REVERSE);
-    mvaddch(sy + 2, field_start + cursor_pos, ' ');
-    attroff(A_REVERSE);
-    attroff(COLOR_PAIR(CP_ACCENT));
-
-    attron(COLOR_PAIR(CP_ACCENT));
-    const char *msg     = " Press ENTER to search, ESC to cancel ";
-    int         msg_len = strlen(msg);
-    int         msg_x   = sx + (w - msg_len) / 2;
-    mvprintw(sy + 4, msg_x, "%s", msg);
-    attroff(COLOR_PAIR(CP_ACCENT));
+    draw_input_dialog(" SEARCH MODEL ", " Press ENTER to search, ESC to cancel ");
 }
 
 /* -----------------------------------------------------------------------------
@@ -1209,29 +1180,33 @@ static void execute_pull_model(const char *model_name) {
 }
 
 /**
- * @brief Handle keyboard input for the pull dialog.
+ * @brief Shared key-handler core for text-input dialogs.
+ *
+ * Processes one keystroke for any dialog that uses @c st.dialog_input.
+ * The caller supplies two callbacks:
+ *  - @p draw_fn   redraws the dialog (called after BACKSPACE / printable key).
+ *  - @p enter_fn  called when ENTER is pressed with a non-empty input buffer;
+ *                 responsible for consuming the input and closing the dialog.
+ * ESC always clears the buffer and triggers a full_refresh().
+ *
+ * @param[in] active_flag Pointer to the st flag that keeps this dialog open
+ *                        (set to 0 on ESC so the caller's loop exits cleanly).
+ * @param[in] draw_fn     Function that redraws the dialog.
+ * @param[in] enter_fn    Function that handles a confirmed (ENTER) submission.
  */
-static void handle_pull_dialog_keys(void) {
+static void handle_input_dialog_keys(int *active_flag, void (*draw_fn)(void), void (*enter_fn)(void)) {
     int ch = getch();
     if (ch == 27) { // ESCAPE
-        st.show_dialog = 0;
+        *active_flag = 0;
         memset(st.dialog_input, 0, sizeof(st.dialog_input));
         full_refresh();
     } else if (ch == 10 || ch == 13) { // ENTER
-        if (strlen(st.dialog_input)) {
-            st.pulling     = 1;
-            st.show_dialog = 0;
-            full_refresh();
-
-            def_prog_mode();
-            endwin();
-            execute_pull_model(st.dialog_input);
-        }
+        enter_fn();
     } else if (ch == 127 || ch == KEY_BACKSPACE || ch == 8) { // BACKSPACE
         size_t len = strlen(st.dialog_input);
         if (len) {
             st.dialog_input[len - 1] = '\0';
-            draw_pull_dialog();
+            draw_fn();
             refresh();
         }
     } else if (ch >= 32 && ch <= 126 && isprint(ch)) { // PRINTABLE
@@ -1239,48 +1214,51 @@ static void handle_pull_dialog_keys(void) {
         if (len < MAX_NAME_LEN - 1) {
             st.dialog_input[len]     = ch;
             st.dialog_input[len + 1] = '\0';
-            draw_pull_dialog();
+            draw_fn();
             refresh();
         }
     }
+}
+
+/* -- pull dialog enter callback ------------------------------------------ */
+static void pull_dialog_enter(void) {
+    if (strlen(st.dialog_input)) {
+        st.pulling     = 1;
+        st.show_dialog = 0;
+        full_refresh();
+
+        def_prog_mode();
+        endwin();
+        execute_pull_model(st.dialog_input);
+    }
+}
+
+/**
+ * @brief Handle keyboard input for the pull dialog.
+ */
+static void handle_pull_dialog_keys(void) {
+    handle_input_dialog_keys(&st.show_dialog, draw_pull_dialog, pull_dialog_enter);
+}
+
+/* -- search dialog enter callback ---------------------------------------- */
+static void search_dialog_enter(void) {
+    if (strlen(st.dialog_input)) {
+        snprintf(st.filter, MAX_NAME_LEN, "%s", st.dialog_input);
+        st.sel_model = 0;
+    } else {
+        st.filter[0] = '\0';
+    }
+    st.show_search = 0;
+    memset(st.dialog_input, 0, sizeof(st.dialog_input));
+    full_refresh();
+    log_msg("Search filter: %s", strlen(st.filter) ? st.filter : "(cleared)");
 }
 
 /**
  * @brief Handle keyboard input for the search dialog.
  */
 static void handle_search_dialog_keys(void) {
-    int ch = getch();
-    if (ch == 27) { // ESCAPE
-        st.show_search = 0;
-        memset(st.dialog_input, 0, sizeof(st.dialog_input));
-        full_refresh();
-    } else if (ch == 10 || ch == 13) { // ENTER
-        if (strlen(st.dialog_input)) {
-            snprintf(st.filter, MAX_NAME_LEN, "%s", st.dialog_input);
-            st.sel_model = 0;
-        } else {
-            st.filter[0] = '\0';
-        }
-        st.show_search = 0;
-        memset(st.dialog_input, 0, sizeof(st.dialog_input));
-        full_refresh();
-        log_msg("Search filter: %s", strlen(st.filter) ? st.filter : "(cleared)");
-    } else if (ch == 127 || ch == KEY_BACKSPACE || ch == 8) { // BACKSPACE
-        size_t len = strlen(st.dialog_input);
-        if (len) {
-            st.dialog_input[len - 1] = '\0';
-            draw_search_dialog();
-            refresh();
-        }
-    } else if (ch >= 32 && ch <= 126 && isprint(ch)) { // PRINTABLE
-        size_t len = strlen(st.dialog_input);
-        if (len < MAX_NAME_LEN - 1) {
-            st.dialog_input[len]     = ch;
-            st.dialog_input[len + 1] = '\0';
-            draw_search_dialog();
-            refresh();
-        }
-    }
+    handle_input_dialog_keys(&st.show_search, draw_search_dialog, search_dialog_enter);
 }
 
 /**
