@@ -41,6 +41,7 @@
 #define MAX_LOG_LEN     512
 #define MIN_COL_PAD     2
 #define MAX_COL_WIDTH   40
+#define MAX_CMD_OUT     32768
 
 /* -----------------------------------------------------------------------------
  * ncurses Color Pairs
@@ -167,7 +168,7 @@ static int run_cmd(const char *cmd, char *out, size_t sz) {
  * @param[in] out The raw text output from `ollama list`.
  */
 static void parse_list(const char *out) {
-    char work[16384];
+    char work[MAX_CMD_OUT];
 
     snprintf(work, sizeof(work), "%s", out);
     char *line = strtok(work, "\n");
@@ -247,7 +248,7 @@ static void parse_list(const char *out) {
  * @param[in] out The raw text output from `ollama ps`.
  */
 static void parse_ps(const char *out) {
-    char work[16384];
+    char work[MAX_CMD_OUT];
 
     snprintf(work, sizeof(work), "%s", out);
     char *line = strtok(work, "\n");
@@ -454,7 +455,7 @@ static void compute_widths(void) {
  * It is thread-safe (uses mutex).
  */
 static void refresh_data(void) {
-    char out[65536];
+    char out[MAX_CMD_OUT];
 
     run_cmd("ollama list 2>/dev/null", out, sizeof(out));
     parse_list(out);
