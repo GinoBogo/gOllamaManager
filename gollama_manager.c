@@ -907,27 +907,35 @@ static void draw_info_dialog(void) {
     int w = (cols - 4 < 90) ? cols - 4 : 90;
     if (w < 40)
         w = 40;
+
     int h = rows - 10;
     if (h > 30)
         h = 30;
     if (h < 10)
         h = 10;
+
     int sy = (rows - h) / 2, sx = (cols - w) / 2;
 
     attron(COLOR_PAIR(CP_DIALOG));
-    for (int i = 0; i < h; i++)
-        for (int j = 0; j < w; j++) mvaddch(sy + i, sx + j, ' ');
+    for (int i = 0; i < h; i++) {
+        for (int j = 0; j < w; j++) {
+            mvaddch(sy + i, sx + j, ' ');
+        }
+    }
     attroff(COLOR_PAIR(CP_DIALOG));
 
     attron(COLOR_PAIR(CP_DIALOG_BORDER));
-    for (int i = 0; i < w; i++) mvaddch(sy, sx + i, ACS_HLINE);
-    for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i, ACS_HLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i, sx, ACS_VLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i, sx + w - 1, ACS_VLINE);
-    mvaddch(sy, sx, ACS_ULCORNER);
-    mvaddch(sy, sx + w - 1, ACS_URCORNER);
-    mvaddch(sy + h - 1, sx, ACS_LLCORNER);
+    // clang-format off
+    for (int i = 0; i < w; i++) mvaddch(sy        , sx + i    , ACS_HLINE);
+    for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i    , ACS_HLINE);
+    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx        , ACS_VLINE);
+    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx + w - 1, ACS_VLINE);
+
+    mvaddch(sy        , sx        , ACS_ULCORNER);
+    mvaddch(sy        , sx + w - 1, ACS_URCORNER);
+    mvaddch(sy + h - 1, sx        , ACS_LLCORNER);
     mvaddch(sy + h - 1, sx + w - 1, ACS_LRCORNER);
+    // clang-format on
     attroff(COLOR_PAIR(CP_DIALOG_BORDER));
 
     attron(COLOR_PAIR(CP_HEADER) | A_BOLD);
@@ -955,7 +963,8 @@ static void draw_info_dialog(void) {
  * @brief Draw the pull model dialog with text input.
  */
 static void draw_pull_dialog(void) {
-    int w = 64, h = 6;
+    int w  = 64;
+    int h  = 6;
     int sy = (rows - h) / 2;
     int sx = (cols - w) / 2;
 
@@ -986,12 +995,12 @@ static void draw_pull_dialog(void) {
     attroff(A_BOLD | COLOR_PAIR(CP_HEADER));
 
     attron(COLOR_PAIR(CP_DIALOG));
-    mvprintw(sy + 2, sx + 4, "Name:");
+    mvprintw(sy + 2, sx + 3, "Model:");
     attroff(COLOR_PAIR(CP_DIALOG));
 
-    int field_pads  = 10;
-    int field_start = sx + field_pads;
-    int field_width = w - (2 * field_pads);
+    int field_xpad  = 10;
+    int field_start = sx + field_xpad;
+    int field_width = w - (2 * field_xpad);
 
     attron(COLOR_PAIR(CP_ACCENT));
     for (int i = 0; i < field_width; i++) {
@@ -1022,43 +1031,56 @@ static void draw_pull_dialog(void) {
  * @brief Draw the search dialog with text input.
  */
 static void draw_search_dialog(void) {
-    int w = 64, h = 6;
-    int sy = (rows - h) / 2, sx = (cols - w) / 2;
+    int w  = 64;
+    int h  = 6;
+    int sy = (rows - h) / 2;
+    int sx = (cols - w) / 2;
 
     attron(COLOR_PAIR(CP_DIALOG));
-    for (int i = 0; i < h; i++)
-        for (int j = 0; j < w; j++) mvaddch(sy + i, sx + j, ' ');
+    for (int i = 0; i < h; i++) {
+        for (int j = 0; j < w; j++) {
+            mvaddch(sy + i, sx + j, ' ');
+        }
+    }
     attroff(COLOR_PAIR(CP_DIALOG));
 
     attron(COLOR_PAIR(CP_DIALOG_BORDER));
-    for (int i = 0; i < w; i++) mvaddch(sy, sx + i, ACS_HLINE);
-    for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i, ACS_HLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i, sx, ACS_VLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i, sx + w - 1, ACS_VLINE);
-    mvaddch(sy, sx, ACS_ULCORNER);
-    mvaddch(sy, sx + w - 1, ACS_URCORNER);
-    mvaddch(sy + h - 1, sx, ACS_LLCORNER);
+    // clang-format off
+    for (int i = 0; i < w; i++) mvaddch(sy        , sx + i    , ACS_HLINE);
+    for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i    , ACS_HLINE);
+    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx        , ACS_VLINE);
+    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx + w - 1, ACS_VLINE);
+
+    mvaddch(sy        , sx        , ACS_ULCORNER);
+    mvaddch(sy        , sx + w - 1, ACS_URCORNER);
+    mvaddch(sy + h - 1, sx        , ACS_LLCORNER);
     mvaddch(sy + h - 1, sx + w - 1, ACS_LRCORNER);
+    // clang-format on
     attroff(COLOR_PAIR(CP_DIALOG_BORDER));
 
     attron(COLOR_PAIR(CP_HEADER) | A_BOLD);
-    mvprintw(sy + 1, sx + (w - 12) / 2, " SEARCH ");
+    mvprintw(sy + 1, sx + (w - 12) / 2, " SEARCH MODEL ");
     attroff(A_BOLD | COLOR_PAIR(CP_HEADER));
 
     attron(COLOR_PAIR(CP_DIALOG));
-    mvprintw(sy + 2, sx + 4, "Search term:");
+    mvprintw(sy + 2, sx + 3, "Model:");
     attroff(COLOR_PAIR(CP_DIALOG));
 
-    int field_start = sx + 17;
-    int field_width = 42;
+    int field_xpad  = 10;
+    int field_start = sx + field_xpad;
+    int field_width = w - (2 * field_xpad);
+
     attron(COLOR_PAIR(CP_ACCENT));
     for (int i = 0; i < field_width; i++) {
         mvaddch(sy + 2, field_start + i, ' ');
     }
     mvprintw(sy + 2, field_start, "%-*.*s", field_width - 1, field_width - 1, st.dialog_input);
+
     int cursor_pos = strlen(st.dialog_input);
-    if (cursor_pos >= field_width - 1)
+    if (cursor_pos >= field_width - 1) {
         cursor_pos = field_width - 1;
+    }
+
     /* Block cursor: reverse video space */
     attron(A_REVERSE);
     mvaddch(sy + 2, field_start + cursor_pos, ' ');
@@ -1080,13 +1102,17 @@ static void draw_search_dialog(void) {
  * @brief Draw a confirmation dialog with OK and Cancel buttons.
  */
 static void draw_confirm_dialog(void) {
-    int w = 50, h = 6;
+    int w  = 64;
+    int h  = 6;
     int sy = (rows - h) / 2;
     int sx = (cols - w) / 2;
 
     attron(COLOR_PAIR(CP_DIALOG));
-    for (int i = 0; i < h; i++)
-        for (int j = 0; j < w; j++) mvaddch(sy + i, sx + j, ' ');
+    for (int i = 0; i < h; i++) {
+        for (int j = 0; j < w; j++) {
+            mvaddch(sy + i, sx + j, ' ');
+        }
+    }
     attroff(COLOR_PAIR(CP_DIALOG));
 
     attron(COLOR_PAIR(CP_DIALOG_BORDER));
@@ -1095,6 +1121,7 @@ static void draw_confirm_dialog(void) {
     for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i    , ACS_HLINE);
     for (int i = 0; i < h; i++) mvaddch(sy + i    , sx        , ACS_VLINE);
     for (int i = 0; i < h; i++) mvaddch(sy + i    , sx + w - 1, ACS_VLINE);
+
     mvaddch(sy         , sx        , ACS_ULCORNER);
     mvaddch(sy         , sx + w - 1, ACS_URCORNER);
     mvaddch(sy + h - 1 , sx        , ACS_LLCORNER);
@@ -1105,7 +1132,7 @@ static void draw_confirm_dialog(void) {
     attron(COLOR_PAIR(CP_DEFAULT));
     int msg_len = strlen(st.confirm_msg);
     int msg_x   = sx + (w - msg_len) / 2;
-    mvprintw(sy + 2, msg_x, "%s", st.confirm_msg);
+    mvprintw(sy + 2, msg_x, " %s ", st.confirm_msg);
     attroff(COLOR_PAIR(CP_DEFAULT));
 
     int btn_ok_x     = sx + w / 2 - 12;
@@ -1170,13 +1197,346 @@ static void *refresh_thread(void *arg) {
 }
 
 /* -----------------------------------------------------------------------------
- * Main Program
+ * Helper Functions for Main Event Loop
  * -------------------------------------------------------------------------- */
 /**
- * @brief Entry point of the Ollama Model Manager.
+ * @brief Execute the ollama pull command for a model.
+ *
+ * @param[in] model_name The name of the model to pull.
  */
-int main(void) {
-    setlocale(LC_ALL, ""); // Prepare for UTF-8 characters
+static void execute_pull_model(const char *model_name) {
+    char cmd[MAX_LINE_LEN];
+    snprintf(cmd, sizeof(cmd), "ollama pull %s", model_name);
+    printf("\n");
+    printf("┌─────────────────────────────────────────────────────────────────────┐\n");
+    printf("│                            PULLING MODEL                            │\n");
+    printf("└─────────────────────────────────────────────────────────────────────┘\n");
+    printf("\n");
+    printf("Model: %s\n", model_name);
+    printf("───────────────────────────────────────────────────────────────────────\n");
+    fflush(stdout);
+
+    int ret = system(cmd);
+    if (ret == 0)
+        printf("[SUCCESS] Model '%s' pulled successfully.\n", model_name);
+    else
+        printf("[ERROR] Failed to pull model '%s'\n", model_name);
+
+    printf("\nPress ENTER to continue...");
+    fflush(stdout);
+    getchar();
+
+    reset_prog_mode();
+    init_ncurses();
+    refresh_data();
+    snprintf(st.status, sizeof(st.status), "Pull complete");
+    snprintf(st.logmsg, sizeof(st.logmsg), "Pulled model: %s", model_name);
+    full_refresh();
+    st.pulling = 0;
+    memset(st.dialog_input, 0, sizeof(st.dialog_input));
+}
+
+/**
+ * @brief Handle keyboard input for the pull dialog.
+ */
+static void handle_pull_dialog_keys(void) {
+    int ch = getch();
+    if (ch == 27) { // ESCAPE
+        st.show_dialog = 0;
+        memset(st.dialog_input, 0, sizeof(st.dialog_input));
+        full_refresh();
+    } else if (ch == 10 || ch == 13) { // ENTER
+        if (strlen(st.dialog_input)) {
+            st.pulling     = 1;
+            st.show_dialog = 0;
+            full_refresh();
+
+            def_prog_mode();
+            endwin();
+            execute_pull_model(st.dialog_input);
+        }
+    } else if (ch == 127 || ch == KEY_BACKSPACE || ch == 8) { // BACKSPACE
+        size_t len = strlen(st.dialog_input);
+        if (len) {
+            st.dialog_input[len - 1] = '\0';
+            draw_pull_dialog();
+            refresh();
+        }
+    } else if (ch >= 32 && ch <= 126 && isprint(ch)) { // PRINTABLE
+        size_t len = strlen(st.dialog_input);
+        if (len < MAX_NAME_LEN - 1) {
+            st.dialog_input[len]     = ch;
+            st.dialog_input[len + 1] = '\0';
+            draw_pull_dialog();
+            refresh();
+        }
+    }
+}
+
+/**
+ * @brief Handle keyboard input for the search dialog.
+ */
+static void handle_search_dialog_keys(void) {
+    int ch = getch();
+    if (ch == 27) { // ESCAPE
+        st.show_search = 0;
+        memset(st.dialog_input, 0, sizeof(st.dialog_input));
+        full_refresh();
+    } else if (ch == 10 || ch == 13) { // ENTER
+        if (strlen(st.dialog_input)) {
+            snprintf(st.filter, MAX_NAME_LEN, "%s", st.dialog_input);
+            st.sel_model = 0;
+        } else {
+            st.filter[0] = '\0';
+        }
+        st.show_search = 0;
+        memset(st.dialog_input, 0, sizeof(st.dialog_input));
+        full_refresh();
+        log_msg("Search filter: %s", strlen(st.filter) ? st.filter : "(cleared)");
+    } else if (ch == 127 || ch == KEY_BACKSPACE || ch == 8) { // BACKSPACE
+        size_t len = strlen(st.dialog_input);
+        if (len) {
+            st.dialog_input[len - 1] = '\0';
+            draw_search_dialog();
+            refresh();
+        }
+    } else if (ch >= 32 && ch <= 126 && isprint(ch)) { // PRINTABLE
+        size_t len = strlen(st.dialog_input);
+        if (len < MAX_NAME_LEN - 1) {
+            st.dialog_input[len]     = ch;
+            st.dialog_input[len + 1] = '\0';
+            draw_search_dialog();
+            refresh();
+        }
+    }
+}
+
+/**
+ * @brief Handle keyboard input for the confirmation dialog.
+ */
+static void handle_confirm_dialog_keys(void) {
+    int ch = getch();
+    if (ch == 27) { // ESCAPE
+        st.confirm_active = 0;
+        full_refresh();
+        return;
+    }
+    switch (ch) {
+        case KEY_LEFT:
+            st.confirm_choice = 1;
+            draw_confirm_dialog();
+            refresh();
+            break;
+        case KEY_RIGHT:
+            st.confirm_choice = 0;
+            draw_confirm_dialog();
+            refresh();
+            break;
+        case '\t':
+            st.confirm_choice = !st.confirm_choice;
+            draw_confirm_dialog();
+            refresh();
+            break;
+        case 10:
+        case 13: // ENTER
+            st.confirm_active = 0;
+            full_refresh();
+            if (st.confirm_choice == 1) {
+                if (st.confirm_is_delete) {
+                    remove_model(st.confirm_target);
+                } else {
+                    stop_model(st.confirm_target);
+                }
+                refresh_data();
+                full_refresh();
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+/**
+ * @brief Get the name of the currently selected model (filtered).
+ *
+ * @return Pointer to the selected model name, or NULL if none selected.
+ */
+static char *get_selected_model_name(void) {
+    int   vis  = 0;
+    char *name = NULL;
+    pthread_mutex_lock(&st.mutex);
+    for (int i = 0; i < st.model_cnt; i++) {
+        if (!strlen(st.filter) || strcasestr(st.models[i].name, st.filter)) {
+            if (vis == st.sel_model) {
+                name = st.models[i].name;
+                break;
+            }
+            vis++;
+        }
+    }
+    pthread_mutex_unlock(&st.mutex);
+    return name;
+}
+
+/**
+ * @brief Get the count of visible models (after filtering).
+ *
+ * @return Number of visible models.
+ */
+static int get_visible_model_count(void) {
+    int vis = 0;
+    pthread_mutex_lock(&st.mutex);
+    for (int i = 0; i < st.model_cnt; i++)
+        if (!strlen(st.filter) || strcasestr(st.models[i].name, st.filter))
+            vis++;
+    pthread_mutex_unlock(&st.mutex);
+    return vis;
+}
+
+/**
+ * @brief Handle main UI keyboard input.
+ */
+static void handle_main_keys(int ch) {
+    switch (ch) {
+        case 'q':
+        case 'Q':
+            cleanup();
+            pthread_mutex_destroy(&st.mutex);
+            printf("\nGoodbye.\n");
+            exit(0);
+
+        case 'r':
+        case 'R':
+            snprintf(st.status, sizeof(st.status), "Refreshing...");
+            draw_header();
+            refresh();
+            pthread_t tid;
+            pthread_create(&tid, NULL, refresh_thread, NULL);
+            pthread_detach(tid);
+            break;
+
+        case 'i':
+        case 'I':
+            if (st.tab == 0 && st.model_cnt) {
+                char *name = get_selected_model_name();
+                if (name) {
+                    show_info(name);
+                    draw_info_dialog();
+                    refresh();
+                    log_msg("Info for %s", name);
+                }
+            }
+            break;
+
+        case KEY_UP:
+            if (st.tab == 0 && st.model_cnt) {
+                int vis = get_visible_model_count();
+                if (vis) {
+                    st.sel_model = (st.sel_model - 1 + vis) % vis;
+                    draw_model_list();
+                    refresh();
+                }
+            } else if (st.tab == 1 && st.running_cnt) {
+                st.sel_running = (st.sel_running - 1 + st.running_cnt) % st.running_cnt;
+                draw_running_list();
+                refresh();
+            }
+            break;
+
+        case KEY_DOWN:
+            if (st.tab == 0 && st.model_cnt) {
+                int vis = get_visible_model_count();
+                if (vis) {
+                    st.sel_model = (st.sel_model + 1) % vis;
+                    draw_model_list();
+                    refresh();
+                }
+            } else if (st.tab == 1 && st.running_cnt) {
+                st.sel_running = (st.sel_running + 1) % st.running_cnt;
+                draw_running_list();
+                refresh();
+            }
+            break;
+
+        case KEY_LEFT:
+            if (st.tab == 1) {
+                st.tab       = 0;
+                st.sel_model = 0;
+                full_refresh();
+            }
+            break;
+
+        case KEY_RIGHT:
+            if (st.tab == 0) {
+                st.tab         = 1;
+                st.sel_running = 0;
+                full_refresh();
+            }
+            break;
+
+        case 'd':
+        case 'D':
+            if (st.tab == 0 && st.model_cnt) {
+                char *name = get_selected_model_name();
+                if (name) {
+                    snprintf(st.confirm_msg, sizeof(st.confirm_msg), "Delete model '%s' ?", name);
+                    snprintf(st.confirm_target, MAX_NAME_LEN, "%s", name);
+                    st.confirm_is_delete = 1;
+                    st.confirm_choice    = 1;
+                    st.confirm_active    = 1;
+                    draw_confirm_dialog();
+                    refresh();
+                }
+            }
+            break;
+
+        case 's':
+        case 'S':
+            if (st.tab == 1 && st.running_cnt) {
+                char *name = st.running[st.sel_running].name;
+                snprintf(st.confirm_msg, sizeof(st.confirm_msg), "Stop model '%s' ?", name);
+                snprintf(st.confirm_target, MAX_NAME_LEN, "%s", name);
+                st.confirm_is_delete = 0;
+                st.confirm_choice    = 1;
+                st.confirm_active    = 1;
+                draw_confirm_dialog();
+                refresh();
+            }
+            break;
+
+        case 'p':
+        case 'P':
+            memset(st.dialog_input, 0, sizeof(st.dialog_input));
+            st.show_dialog = 1;
+            draw_pull_dialog();
+            refresh();
+            break;
+
+        case '/':
+            memset(st.dialog_input, 0, sizeof(st.dialog_input));
+            st.show_search = 1;
+            draw_search_dialog();
+            refresh();
+            break;
+
+        case KEY_RESIZE:
+            getmaxyx(stdscr, rows, cols);
+            compute_widths();
+            full_refresh();
+            break;
+
+        default:
+            break;
+    }
+}
+
+/**
+ * @brief Initialize the application.
+ *
+ * @return 0 on success, 1 on failure.
+ */
+static int initialize_app(void) {
+    setlocale(LC_ALL, "");
 
     char test[256];
     run_cmd("ollama --version 2>/dev/null", test, sizeof(test));
@@ -1194,8 +1554,21 @@ int main(void) {
     snprintf(st.logmsg, sizeof(st.logmsg), "Loaded %d model(s), %d running", st.model_cnt, st.running_cnt);
     full_refresh();
 
-    pthread_t tid;
-    int       ch;
+    return 0;
+}
+
+/* -----------------------------------------------------------------------------
+ * Main Program
+ * -------------------------------------------------------------------------- */
+/**
+ * @brief Entry point of the Ollama Model Manager.
+ */
+int main(void) {
+    if (initialize_app() != 0) {
+        return 1;
+    }
+
+    int ch;
 
     while (1) {
         if (st.need_refresh) {
@@ -1215,144 +1588,17 @@ int main(void) {
         }
 
         if (st.show_dialog) {
-            ch = getch();
-            if (ch == 27) {
-                st.show_dialog = 0;
-                memset(st.dialog_input, 0, sizeof(st.dialog_input));
-                full_refresh();
-            } else if (ch == 10 || ch == 13) {
-                if (strlen(st.dialog_input)) {
-                    st.pulling     = 1;
-                    st.show_dialog = 0;
-                    full_refresh();
-
-                    def_prog_mode();
-                    endwin();
-                    char cmd[MAX_LINE_LEN];
-                    snprintf(cmd, sizeof(cmd), "ollama pull %s", st.dialog_input);
-                    printf("\n");
-                    printf("┌─────────────────────────────────────────────────────────────────────┐\n");
-                    printf("│                            PULLING MODEL                            │\n");
-                    printf("└─────────────────────────────────────────────────────────────────────┘\n");
-                    printf("\n");
-                    printf("Model: %s\n", st.dialog_input);
-                    printf("───────────────────────────────────────────────────────────────────────\n");
-                    fflush(stdout);
-
-                    int ret = system(cmd);
-                    if (ret == 0)
-                        printf("[SUCCESS] Model '%s' pulled successfully.\n", st.dialog_input);
-                    else
-                        printf("[ERROR] Failed to pull model '%s'\n", st.dialog_input);
-
-                    printf("\nPress ENTER to continue...");
-                    fflush(stdout);
-                    getchar();
-
-                    reset_prog_mode();
-                    init_ncurses();
-                    refresh_data();
-                    snprintf(st.status, sizeof(st.status), "Pull complete");
-                    snprintf(st.logmsg, sizeof(st.logmsg), "Pulled model: %s", st.dialog_input);
-                    full_refresh();
-                    st.pulling = 0;
-                    memset(st.dialog_input, 0, sizeof(st.dialog_input));
-                }
-            } else if (ch == 127 || ch == KEY_BACKSPACE || ch == 8) {
-                size_t len = strlen(st.dialog_input);
-                if (len) {
-                    st.dialog_input[len - 1] = '\0';
-                    draw_pull_dialog();
-                    refresh();
-                }
-            } else if (ch >= 32 && ch <= 126 && isprint(ch)) {
-                size_t len = strlen(st.dialog_input);
-                if (len < MAX_NAME_LEN - 1) {
-                    st.dialog_input[len]     = ch;
-                    st.dialog_input[len + 1] = '\0';
-                    draw_pull_dialog();
-                    refresh();
-                }
-            }
+            handle_pull_dialog_keys();
             continue;
         }
 
         if (st.show_search) {
-            ch = getch();
-            if (ch == 27) {
-                st.show_search = 0;
-                memset(st.dialog_input, 0, sizeof(st.dialog_input));
-                full_refresh();
-            } else if (ch == 10 || ch == 13) {
-                if (strlen(st.dialog_input)) {
-                    snprintf(st.filter, MAX_NAME_LEN, "%s", st.dialog_input);
-                    st.sel_model = 0;
-                } else {
-                    st.filter[0] = '\0';
-                }
-                st.show_search = 0;
-                memset(st.dialog_input, 0, sizeof(st.dialog_input));
-                full_refresh();
-                log_msg("Search filter: %s", strlen(st.filter) ? st.filter : "(cleared)");
-            } else if (ch == 127 || ch == KEY_BACKSPACE || ch == 8) {
-                size_t len = strlen(st.dialog_input);
-                if (len) {
-                    st.dialog_input[len - 1] = '\0';
-                    draw_search_dialog();
-                    refresh();
-                }
-            } else if (ch >= 32 && ch <= 126 && isprint(ch)) {
-                size_t len = strlen(st.dialog_input);
-                if (len < MAX_NAME_LEN - 1) {
-                    st.dialog_input[len]     = ch;
-                    st.dialog_input[len + 1] = '\0';
-                    draw_search_dialog();
-                    refresh();
-                }
-            }
+            handle_search_dialog_keys();
             continue;
         }
 
         if (st.confirm_active) {
-            ch = getch();
-            if (ch == 27) {
-                st.confirm_active = 0;
-                full_refresh();
-                continue;
-            }
-            switch (ch) {
-                case KEY_LEFT:
-                    st.confirm_choice = 1;
-                    draw_confirm_dialog();
-                    refresh();
-                    break;
-                case KEY_RIGHT:
-                    st.confirm_choice = 0;
-                    draw_confirm_dialog();
-                    refresh();
-                    break;
-                case '\t':
-                    st.confirm_choice = !st.confirm_choice;
-                    draw_confirm_dialog();
-                    refresh();
-                    break;
-                case 10:
-                case 13:
-                    st.confirm_active = 0;
-                    full_refresh();
-                    if (st.confirm_choice == 1) {
-                        if (st.confirm_is_delete) {
-                            remove_model(st.confirm_target);
-                        } else {
-                            stop_model(st.confirm_target);
-                        }
-                        refresh_data();
-                        full_refresh();
-                    }
-                    continue;
-                default:
-                    break;
-            }
+            handle_confirm_dialog_keys();
             continue;
         }
 
@@ -1360,172 +1606,10 @@ int main(void) {
         if (ch == ERR)
             continue;
 
-        switch (ch) {
-            case 'q':
-            case 'Q':
-                cleanup();
-                pthread_mutex_destroy(&st.mutex);
-                printf("\nGoodbye.\n");
-                return 0;
-
-            case 'r':
-            case 'R':
-                snprintf(st.status, sizeof(st.status), "Refreshing...");
-                draw_header();
-                refresh();
-                pthread_create(&tid, NULL, refresh_thread, NULL);
-                pthread_detach(tid);
-                break;
-
-            case 'i':
-            case 'I':
-                if (st.tab == 0 && st.model_cnt) {
-                    int   vis  = 0;
-                    char *name = NULL;
-                    pthread_mutex_lock(&st.mutex);
-                    for (int i = 0; i < st.model_cnt; i++) {
-                        if (!strlen(st.filter) || strcasestr(st.models[i].name, st.filter)) {
-                            if (vis == st.sel_model) {
-                                name = st.models[i].name;
-                                break;
-                            }
-                            vis++;
-                        }
-                    }
-                    pthread_mutex_unlock(&st.mutex);
-                    if (name) {
-                        show_info(name);
-                        draw_info_dialog();
-                        refresh();
-                        log_msg("Info for %s", name);
-                    }
-                }
-                break;
-
-            case KEY_UP:
-                if (st.tab == 0 && st.model_cnt) {
-                    int vis = 0;
-                    pthread_mutex_lock(&st.mutex);
-                    for (int i = 0; i < st.model_cnt; i++)
-                        if (!strlen(st.filter) || strcasestr(st.models[i].name, st.filter))
-                            vis++;
-                    pthread_mutex_unlock(&st.mutex);
-                    if (vis) {
-                        st.sel_model = (st.sel_model - 1 + vis) % vis;
-                        draw_model_list();
-                        refresh();
-                    }
-                } else if (st.tab == 1 && st.running_cnt) {
-                    st.sel_running = (st.sel_running - 1 + st.running_cnt) % st.running_cnt;
-                    draw_running_list();
-                    refresh();
-                }
-                break;
-
-            case KEY_DOWN:
-                if (st.tab == 0 && st.model_cnt) {
-                    int vis = 0;
-                    pthread_mutex_lock(&st.mutex);
-                    for (int i = 0; i < st.model_cnt; i++)
-                        if (!strlen(st.filter) || strcasestr(st.models[i].name, st.filter))
-                            vis++;
-                    pthread_mutex_unlock(&st.mutex);
-                    if (vis) {
-                        st.sel_model = (st.sel_model + 1) % vis;
-                        draw_model_list();
-                        refresh();
-                    }
-                } else if (st.tab == 1 && st.running_cnt) {
-                    st.sel_running = (st.sel_running + 1) % st.running_cnt;
-                    draw_running_list();
-                    refresh();
-                }
-                break;
-
-            case KEY_LEFT:
-                if (st.tab == 1) {
-                    st.tab       = 0;
-                    st.sel_model = 0;
-                    full_refresh();
-                }
-                break;
-
-            case KEY_RIGHT:
-                if (st.tab == 0) {
-                    st.tab         = 1;
-                    st.sel_running = 0;
-                    full_refresh();
-                }
-                break;
-
-            case 'd':
-            case 'D':
-                if (st.tab == 0 && st.model_cnt) {
-                    int   vis  = 0;
-                    char *name = NULL;
-                    pthread_mutex_lock(&st.mutex);
-                    for (int i = 0; i < st.model_cnt; i++) {
-                        if (!strlen(st.filter) || strcasestr(st.models[i].name, st.filter)) {
-                            if (vis == st.sel_model) {
-                                name = st.models[i].name;
-                                break;
-                            }
-                            vis++;
-                        }
-                    }
-                    pthread_mutex_unlock(&st.mutex);
-                    if (name) {
-                        snprintf(st.confirm_msg, sizeof(st.confirm_msg), "Remove model '%s' ?", name);
-                        snprintf(st.confirm_target, MAX_NAME_LEN, "%s", name);
-                        st.confirm_is_delete = 1;
-                        st.confirm_choice    = 1;
-                        st.confirm_active    = 1;
-                        draw_confirm_dialog();
-                        refresh();
-                    }
-                }
-                break;
-
-            case 's':
-            case 'S':
-                if (st.tab == 1 && st.running_cnt) {
-                    char *name = st.running[st.sel_running].name;
-                    snprintf(st.confirm_msg, sizeof(st.confirm_msg), "Stop model '%s' ?", name);
-                    snprintf(st.confirm_target, MAX_NAME_LEN, "%s", name);
-                    st.confirm_is_delete = 0;
-                    st.confirm_choice    = 1;
-                    st.confirm_active    = 1;
-                    draw_confirm_dialog();
-                    refresh();
-                }
-                break;
-
-            case 'p':
-            case 'P':
-                memset(st.dialog_input, 0, sizeof(st.dialog_input));
-                st.show_dialog = 1;
-                draw_pull_dialog();
-                refresh();
-                break;
-
-            case '/':
-                memset(st.dialog_input, 0, sizeof(st.dialog_input));
-                st.show_search = 1;
-                draw_search_dialog();
-                refresh();
-                break;
-
-            case KEY_RESIZE:
-                getmaxyx(stdscr, rows, cols);
-                compute_widths();
-                full_refresh();
-                break;
-
-            default:
-                break;
-        }
+        handle_main_keys(ch);
     }
 
     cleanup();
+    pthread_mutex_destroy(&st.mutex);
     return 0;
 }
