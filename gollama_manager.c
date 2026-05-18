@@ -956,22 +956,29 @@ static void draw_info_dialog(void) {
  */
 static void draw_pull_dialog(void) {
     int w = 64, h = 6;
-    int sy = (rows - h) / 2, sx = (cols - w) / 2;
+    int sy = (rows - h) / 2;
+    int sx = (cols - w) / 2;
 
     attron(COLOR_PAIR(CP_DIALOG));
-    for (int i = 0; i < h; i++)
-        for (int j = 0; j < w; j++) mvaddch(sy + i, sx + j, ' ');
+    for (int i = 0; i < h; i++) {
+        for (int j = 0; j < w; j++) {
+            mvaddch(sy + i, sx + j, ' ');
+        }
+    }
     attroff(COLOR_PAIR(CP_DIALOG));
 
     attron(COLOR_PAIR(CP_DIALOG_BORDER));
-    for (int i = 0; i < w; i++) mvaddch(sy, sx + i, ACS_HLINE);
-    for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i, ACS_HLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i, sx, ACS_VLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i, sx + w - 1, ACS_VLINE);
-    mvaddch(sy, sx, ACS_ULCORNER);
-    mvaddch(sy, sx + w - 1, ACS_URCORNER);
-    mvaddch(sy + h - 1, sx, ACS_LLCORNER);
+    // clang-format off
+    for (int i = 0; i < w; i++) mvaddch(sy        , sx + i    , ACS_HLINE);
+    for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i    , ACS_HLINE);
+    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx        , ACS_VLINE);
+    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx + w - 1, ACS_VLINE);
+
+    mvaddch(sy        , sx        , ACS_ULCORNER);
+    mvaddch(sy        , sx + w - 1, ACS_URCORNER);
+    mvaddch(sy + h - 1, sx        , ACS_LLCORNER);
     mvaddch(sy + h - 1, sx + w - 1, ACS_LRCORNER);
+    // clang-format on
     attroff(COLOR_PAIR(CP_DIALOG_BORDER));
 
     attron(COLOR_PAIR(CP_HEADER) | A_BOLD);
@@ -979,19 +986,24 @@ static void draw_pull_dialog(void) {
     attroff(A_BOLD | COLOR_PAIR(CP_HEADER));
 
     attron(COLOR_PAIR(CP_DIALOG));
-    mvprintw(sy + 2, sx + 4, "Model name:");
+    mvprintw(sy + 2, sx + 4, "Name:");
     attroff(COLOR_PAIR(CP_DIALOG));
 
-    int field_start = sx + 17;
-    int field_width = 42;
+    int field_pads  = 10;
+    int field_start = sx + field_pads;
+    int field_width = w - (2 * field_pads);
+
     attron(COLOR_PAIR(CP_ACCENT));
     for (int i = 0; i < field_width; i++) {
         mvaddch(sy + 2, field_start + i, ' ');
     }
     mvprintw(sy + 2, field_start, "%-*.*s", field_width - 1, field_width - 1, st.dialog_input);
+
     int cursor_pos = strlen(st.dialog_input);
-    if (cursor_pos >= field_width - 1)
+    if (cursor_pos >= field_width - 1) {
         cursor_pos = field_width - 1;
+    }
+
     /* Block cursor: reverse video space */
     attron(A_REVERSE);
     mvaddch(sy + 2, field_start + cursor_pos, ' ');
