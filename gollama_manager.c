@@ -18,6 +18,7 @@
 /* ************************************************************************** */
 
 #include <ctype.h>
+#include <locale.h>
 #include <ncurses.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -626,12 +627,12 @@ static void draw_footer(void) {
 
     attron(COLOR_PAIR(CP_ACCENT));
     int x = 2;
-    mvprintw(y + 1, x, "[UP/DOWN] Nav");
-    x += 14;
+    mvprintw(y + 1, x, "[▲/▼] Nav");
+    x += 10;
     mvprintw(y + 1, x, "  ");
     x += 2;
-    mvprintw(y + 1, x, "[LEFT/RIGHT] Tabs");
-    x += 18;
+    mvprintw(y + 1, x, "[◀/▶] Tabs");
+    x += 11;
     mvprintw(y + 1, x, "  ");
     x += 2;
     mvprintw(y + 1, x, "[I] Info");
@@ -1162,6 +1163,8 @@ static void *refresh_thread(void *arg) {
  * @brief Entry point of the Ollama Model Manager.
  */
 int main(void) {
+    setlocale(LC_ALL, ""); // Prepare for UTF-8 characters
+
     char test[256];
     run_cmd("ollama --version 2>/dev/null", test, sizeof(test));
     if (!strlen(test)) {

@@ -60,7 +60,7 @@ if(COMPILE_LANGUAGE:CXX)
 endif()
 
 find_library(LIB_PTHREAD pthread)
-find_library(LIB_NCURSES ncurses)
+find_library(LIB_NCURSES ncursesw)
 
 add_executable(gollama_manager "gollama_manager.c")
 
