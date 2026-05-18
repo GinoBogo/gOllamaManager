@@ -580,6 +580,38 @@ static inline void cleanup(void) {
  * UI Drawing – Header, Footer, Tabs, Lists, Log, Dialogs
  * -------------------------------------------------------------------------- */
 /**
+ * @brief Draw a dialog box with background and border.
+ *
+ * @param[in] w Dialog width.
+ * @param[in] h Dialog height.
+ * @param[in] sy Starting Y position (row).
+ * @param[in] sx Starting X position (column).
+ */
+static void draw_dialog_box(int w, int h, int sy, int sx) {
+    attron(COLOR_PAIR(CP_DIALOG));
+    for (int i = 0; i < h; i++) {
+        for (int j = 0; j < w; j++) {
+            mvaddch(sy + i, sx + j, ' ');
+        }
+    }
+    attroff(COLOR_PAIR(CP_DIALOG));
+
+    attron(COLOR_PAIR(CP_DIALOG_BORDER));
+    // clang-format off
+    for (int i = 0; i < w; i++) mvaddch(sy        , sx + i    , ACS_HLINE);
+    for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i    , ACS_HLINE);
+    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx        , ACS_VLINE);
+    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx + w - 1, ACS_VLINE);
+
+    mvaddch(sy        , sx        , ACS_ULCORNER);
+    mvaddch(sy        , sx + w - 1, ACS_URCORNER);
+    mvaddch(sy + h - 1, sx        , ACS_LLCORNER);
+    mvaddch(sy + h - 1, sx + w - 1, ACS_LRCORNER);
+    // clang-format on
+    attroff(COLOR_PAIR(CP_DIALOG_BORDER));
+}
+
+/**
  * @brief Draw the application header with title and status.
  */
 static void draw_header(void) {
@@ -968,27 +1000,7 @@ static void draw_pull_dialog(void) {
     int sy = (rows - h) / 2;
     int sx = (cols - w) / 2;
 
-    attron(COLOR_PAIR(CP_DIALOG));
-    for (int i = 0; i < h; i++) {
-        for (int j = 0; j < w; j++) {
-            mvaddch(sy + i, sx + j, ' ');
-        }
-    }
-    attroff(COLOR_PAIR(CP_DIALOG));
-
-    attron(COLOR_PAIR(CP_DIALOG_BORDER));
-    // clang-format off
-    for (int i = 0; i < w; i++) mvaddch(sy        , sx + i    , ACS_HLINE);
-    for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i    , ACS_HLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx        , ACS_VLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx + w - 1, ACS_VLINE);
-
-    mvaddch(sy        , sx        , ACS_ULCORNER);
-    mvaddch(sy        , sx + w - 1, ACS_URCORNER);
-    mvaddch(sy + h - 1, sx        , ACS_LLCORNER);
-    mvaddch(sy + h - 1, sx + w - 1, ACS_LRCORNER);
-    // clang-format on
-    attroff(COLOR_PAIR(CP_DIALOG_BORDER));
+    draw_dialog_box(w, h, sy, sx);
 
     attron(COLOR_PAIR(CP_HEADER) | A_BOLD);
     mvprintw(sy + 1, sx + (w - 12) / 2, " PULL MODEL ");
@@ -1036,27 +1048,7 @@ static void draw_search_dialog(void) {
     int sy = (rows - h) / 2;
     int sx = (cols - w) / 2;
 
-    attron(COLOR_PAIR(CP_DIALOG));
-    for (int i = 0; i < h; i++) {
-        for (int j = 0; j < w; j++) {
-            mvaddch(sy + i, sx + j, ' ');
-        }
-    }
-    attroff(COLOR_PAIR(CP_DIALOG));
-
-    attron(COLOR_PAIR(CP_DIALOG_BORDER));
-    // clang-format off
-    for (int i = 0; i < w; i++) mvaddch(sy        , sx + i    , ACS_HLINE);
-    for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i    , ACS_HLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx        , ACS_VLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx + w - 1, ACS_VLINE);
-
-    mvaddch(sy        , sx        , ACS_ULCORNER);
-    mvaddch(sy        , sx + w - 1, ACS_URCORNER);
-    mvaddch(sy + h - 1, sx        , ACS_LLCORNER);
-    mvaddch(sy + h - 1, sx + w - 1, ACS_LRCORNER);
-    // clang-format on
-    attroff(COLOR_PAIR(CP_DIALOG_BORDER));
+    draw_dialog_box(w, h, sy, sx);
 
     attron(COLOR_PAIR(CP_HEADER) | A_BOLD);
     mvprintw(sy + 1, sx + (w - 12) / 2, " SEARCH MODEL ");
@@ -1107,27 +1099,7 @@ static void draw_confirm_dialog(void) {
     int sy = (rows - h) / 2;
     int sx = (cols - w) / 2;
 
-    attron(COLOR_PAIR(CP_DIALOG));
-    for (int i = 0; i < h; i++) {
-        for (int j = 0; j < w; j++) {
-            mvaddch(sy + i, sx + j, ' ');
-        }
-    }
-    attroff(COLOR_PAIR(CP_DIALOG));
-
-    attron(COLOR_PAIR(CP_DIALOG_BORDER));
-    // clang-format off
-    for (int i = 0; i < w; i++) mvaddch(sy        , sx + i    , ACS_HLINE);
-    for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i    , ACS_HLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx        , ACS_VLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx + w - 1, ACS_VLINE);
-
-    mvaddch(sy         , sx        , ACS_ULCORNER);
-    mvaddch(sy         , sx + w - 1, ACS_URCORNER);
-    mvaddch(sy + h - 1 , sx        , ACS_LLCORNER);
-    mvaddch(sy + h - 1 , sx + w - 1, ACS_LRCORNER);
-    // clang-format on
-    attroff(COLOR_PAIR(CP_DIALOG_BORDER));
+    draw_dialog_box(w, h, sy, sx);
 
     attron(COLOR_PAIR(CP_DEFAULT));
     int msg_len = strlen(st.confirm_msg);
