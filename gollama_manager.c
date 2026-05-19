@@ -115,6 +115,8 @@ static struct {
     char            confirm_target[MAX_NAME_LEN]; /**< Model name for delete/stop */
     int             confirm_is_delete;            /**< 1 = delete, 0 = stop */
     char            dialog_input[MAX_NAME_LEN];   /**< Input buffer for dialogs */
+    int             dialog_cursor;                /**< Current cursor position in dialog_input */
+    int             dialog_insert;                /**< 1 = insert mode, 0 = overwrite mode */
     char            info_out[8192];               /**< Output buffer for `ollama show` */
     pthread_mutex_t mutex;                        /**< Mutex for thread-safe data access */
 
@@ -1147,22 +1149,26 @@ static void draw_input_dialog(const char *title, //
     int field_start = sx + field_xpad;
     int field_width = w - (2 * field_xpad);
 
+    /* Clear input field and print current buffer */
     attron(COLOR_PAIR(CP_ACCENT));
     for (int i = 0; i < field_width; i++) {
         mvaddch(sy + 2, field_start + i, ' ');
     }
     mvprintw(sy + 2, field_start, "%-*.*s", field_width - 1, field_width - 1, st.dialog_input);
+    attroff(COLOR_PAIR(CP_ACCENT));
 
-    int cursor_pos = (int)strlen(st.dialog_input);
+    /* Draw block cursor at dialog_cursor */
+    int cursor_pos = st.dialog_cursor;
     if (cursor_pos >= field_width - 1) {
         cursor_pos = field_width - 1;
     }
-
-    /* Block cursor: reverse video space */
     attron(A_REVERSE);
-    mvaddch(sy + 2, field_start + cursor_pos, ' ');
+    if (cursor_pos < (int)strlen(st.dialog_input)) {
+        mvaddch(sy + 2, field_start + cursor_pos, st.dialog_input[cursor_pos]);
+    } else {
+        mvaddch(sy + 2, field_start + cursor_pos, ' ');
+    }
     attroff(A_REVERSE);
-    attroff(COLOR_PAIR(CP_ACCENT));
 
     attron(COLOR_PAIR(CP_ACCENT));
     int hint_len = (int)strlen(hint);
@@ -1327,6 +1333,8 @@ static void execute_pull_model(const char *model_name) {
     refresh_data();
     st.pulling = 0;
     memset(st.dialog_input, 0, sizeof(st.dialog_input));
+    st.dialog_cursor = 0;
+    st.dialog_insert = 1;
     snprintf(st.status, sizeof(st.status), "Pull complete");
     snprintf(st.logmsg, sizeof(st.logmsg), "Pulled model: %s", model_name);
     full_refresh();
@@ -1354,24 +1362,107 @@ static void handle_input_dialog_keys(int *active_flag, //
     if (ch == 27) { // ESCAPE
         *active_flag = 0;
         memset(st.dialog_input, 0, sizeof(st.dialog_input));
+        st.dialog_cursor = 0;
+        st.dialog_insert = 1;
         full_refresh();
-    } else if (ch == 10 || ch == 13) { // ENTER
+        return;
+    }
+    if (ch == 10 || ch == 13) { // ENTER
         enter_fn();
-    } else if (ch == 127 || ch == KEY_BACKSPACE || ch == 8) { // BACKSPACE
-        size_t len = strlen(st.dialog_input);
-        if (len) {
-            st.dialog_input[len - 1] = '\0';
+        return;
+    }
+
+    int len = (int)strlen(st.dialog_input);
+
+    switch (ch) {
+        case KEY_LEFT:
+            if (st.dialog_cursor > 0) {
+                st.dialog_cursor--;
+                draw_fn();
+                refresh();
+            }
+            break;
+
+        case KEY_RIGHT:
+            if (st.dialog_cursor < len) {
+                st.dialog_cursor++;
+                draw_fn();
+                refresh();
+            }
+            break;
+
+        case KEY_HOME:
+            st.dialog_cursor = 0;
             draw_fn();
             refresh();
-        }
-    } else if (ch >= 32 && ch <= 126 && isprint(ch)) { // PRINTABLE
-        size_t len = strlen(st.dialog_input);
-        if (len < MAX_NAME_LEN - 1) {
-            st.dialog_input[len]     = ch;
-            st.dialog_input[len + 1] = '\0';
+            break;
+
+        case KEY_END:
+            st.dialog_cursor = len;
             draw_fn();
             refresh();
-        }
+            break;
+
+        case KEY_DC: // Delete key (forward delete)
+            if (st.dialog_cursor < len) {
+                for (int i = st.dialog_cursor; i < len; i++) {
+                    st.dialog_input[i] = st.dialog_input[i + 1];
+                }
+                draw_fn();
+                refresh();
+            }
+            break;
+
+        case 127:
+        case KEY_BACKSPACE:
+        case 8: // Backspace
+            if (st.dialog_cursor > 0) {
+                for (int i = st.dialog_cursor; i <= len; i++) {
+                    st.dialog_input[i - 1] = st.dialog_input[i];
+                }
+                st.dialog_cursor--;
+                draw_fn();
+                refresh();
+            }
+            break;
+
+        case KEY_IC: // Insert key – toggle insert/overwrite mode
+            st.dialog_insert = !st.dialog_insert;
+            draw_fn();
+            refresh();
+            break;
+
+        default:
+            if (ch >= 32 && ch <= 126 && isprint(ch)) {
+                if (st.dialog_insert) {
+                    // Insert mode: make room for new character
+                    if (len < MAX_NAME_LEN - 1) {
+                        for (int i = len; i >= st.dialog_cursor; i--) {
+                            st.dialog_input[i + 1] = st.dialog_input[i];
+                        }
+                        st.dialog_input[st.dialog_cursor] = (char)ch;
+                        st.dialog_cursor++;
+                        draw_fn();
+                        refresh();
+                    }
+                } else {
+                    // Overwrite mode
+                    if (st.dialog_cursor < len) {
+                        st.dialog_input[st.dialog_cursor] = (char)ch;
+                        st.dialog_cursor++;
+                        draw_fn();
+                        refresh();
+                    } else if (len < MAX_NAME_LEN - 1) {
+                        // At end: append
+                        st.dialog_input[len]     = (char)ch;
+                        st.dialog_input[len + 1] = '\0';
+                        st.dialog_cursor++;
+                        draw_fn();
+                        refresh();
+                    }
+                }
+            }
+            break;
     }
 }
 
@@ -1410,6 +1501,8 @@ static void search_dialog_enter(void) {
     }
     st.show_search = 0;
     memset(st.dialog_input, 0, sizeof(st.dialog_input));
+    st.dialog_cursor = 0;
+    st.dialog_insert = 1;
     full_refresh();
     log_msg("Search filter: %s", strlen(st.filter) ? st.filter : "(cleared)");
 }
@@ -1518,7 +1611,7 @@ static void handle_main_keys(int ch) {
             cleanup();
             clear_term();
             pthread_mutex_destroy(&st.mutex);
-            printf("\nDo svidaniya.\n");
+            printf("\nGoodbye.\n");
             exit(0);
 
         case 'r':
@@ -1649,14 +1742,18 @@ static void handle_main_keys(int ch) {
         case 'p':
         case 'P':
             memset(st.dialog_input, 0, sizeof(st.dialog_input));
-            st.show_dialog = 1;
+            st.dialog_cursor = 0;
+            st.dialog_insert = 1;
+            st.show_dialog   = 1;
             draw_pull_dialog();
             refresh();
             break;
 
         case '/':
             memset(st.dialog_input, 0, sizeof(st.dialog_input));
-            st.show_search = 1;
+            st.dialog_cursor = 0;
+            st.dialog_insert = 1;
+            st.show_search   = 1;
             draw_search_dialog();
             refresh();
             break;
@@ -1688,6 +1785,7 @@ static int initialize_app(void) {
     }
 
     memset(&st, 0, sizeof(st));
+    st.dialog_insert = 1; // default to insert mode
     pthread_mutex_init(&st.mutex, NULL);
     init_ncurses();
 
