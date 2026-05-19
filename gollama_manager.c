@@ -181,6 +181,21 @@ static void chdir2root(void) {
 }
 
 /**
+ * @brief Change current working directory to a specified path, ignoring errors.
+ *
+ * This function attempts to change the process's working directory to the given
+ * path. If the operation fails, it is ignored (best effort). Useful for
+ * restoring a previous working directory when we don't care about success.
+ *
+ * @param[in] path The directory to change to.
+ */
+static void chdir2prev(const char *path) {
+    if (chdir(path) == -1) {
+        /* ignore – best effort */
+    }
+}
+
+/**
  * @brief Run a shell command and capture its standard output.
  *
  * @param[in] cmd The shell command to execute.
@@ -196,15 +211,15 @@ static int run_cmd(const char *cmd, //
 
     if (getcwd(old_cwd, sizeof(old_cwd)) != NULL) {
         have_old = 1;
-        chdir2root();
     }
+    chdir2root(); /* change to root for security */
 
     FILE *fp = popen(cmd, "r");
     if (!fp) {
         if (out)
             out[0] = '\0';
         if (have_old) {
-            chdir2root();
+            chdir2prev(old_cwd);
         }
         return -1;
     }
@@ -221,7 +236,9 @@ static int run_cmd(const char *cmd, //
 
     int status = pclose(fp);
     if (have_old) {
-        chdir2root();
+        chdir2prev(old_cwd); /* restore original working directory */
+    } else {
+        chdir2root(); /* keep root if we couldn't get old cwd */
     }
 
     if (WIFEXITED(status)) {
@@ -1198,14 +1215,19 @@ static void draw_confirm_dialog(void) {
 
 /**
  * @brief Perform a full screen refresh (redraw everything).
+ *
+ * Uses werase() to clear the logical screen without forcing a physical clear,
+ * then batches all updates with wnoutrefresh() and doupdate() to eliminate
+ * flicker.
  */
 static void full_refresh(void) {
-    clear();
+    werase(stdscr); // clear logical screen only
     draw_header();
     draw_content();
     draw_log();
     draw_footer();
-    refresh();
+    wnoutrefresh(stdscr); // queue updates
+    doupdate();           // apply all updates at once
 }
 
 /**
@@ -1219,8 +1241,9 @@ static void log_msg(const char *fmt, ...) {
     va_start(ap, fmt);
     vsnprintf(st.logmsg, sizeof(st.logmsg), fmt, ap);
     va_end(ap);
+
     draw_log();
-    refresh();
+    refresh(); // immediate refresh for log messages
 }
 
 // -----------------------------------------------------------------------------
@@ -1254,10 +1277,11 @@ static void execute_pull_model(const char *model_name) {
 
     char old_cwd[4096];
     int  have_old = 0;
+
     if (getcwd(old_cwd, sizeof(old_cwd)) != NULL) {
         have_old = 1;
-        chdir2root();
     }
+    chdir2root();
 
     printf("\n");
     printf("┌─────────────────────────────────────────────────────────────────────┐\n");
@@ -1279,6 +1303,8 @@ static void execute_pull_model(const char *model_name) {
     getchar();
 
     if (have_old) {
+        chdir2prev(old_cwd);
+    } else {
         chdir2root();
     }
 
@@ -1621,7 +1647,7 @@ static void handle_main_keys(int ch) {
 
         case KEY_RESIZE:
             getmaxyx(stdscr, rows, cols);
-            // No need to recompute widths here – next refresh will do it.
+            resize_term(rows, cols);
             full_refresh();
             break;
 
