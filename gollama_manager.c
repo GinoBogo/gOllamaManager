@@ -13,7 +13,7 @@
         MIT
 
     @note
-        Compile: gcc -o ollama_manager ollama_manager.c -O2 -lncurses -lpthread
+        Compile: gcc -o gollama_manager gollama_manager.c -O2 -lncursesw -lpthread
 */
 /* ************************************************************************** */
 
