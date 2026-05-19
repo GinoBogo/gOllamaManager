@@ -20,6 +20,10 @@ A terminal-based user interface (TUI) for managing Ollama models. Built with C a
 
 ![Figure 03](./docs/images/Figure_03.png)
 
+![Figure 04](./docs/images/Figure_04.png)
+
+![Figure 05](./docs/images/Figure_05.png)
+
 ## Requirements
 
 - Linux operating system
