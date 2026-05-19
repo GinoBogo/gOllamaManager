@@ -21,6 +21,7 @@
 #include <locale.h>
 #include <ncurses.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,7 +105,8 @@ static struct {
     int             pulling;                      /**< Non-zero if a pull operation is in progress */
     char            status[MAX_LOG_LEN];          /**< Status message displayed in header */
     char            logmsg[MAX_LOG_LEN];          /**< Log message displayed at bottom */
-    int             need_refresh;                 /**< Set to 1 to request a UI refresh */
+    int             need_refresh;                 /**< Set to 1 to request a UI refresh (protected by mutex) */
+    int             refreshing;                   /**< Non-zero if a refresh thread is running (protected by mutex) */
     int             show_dialog;                  /**< Pull dialog active flag */
     int             show_info;                    /**< Info dialog active flag */
     int             show_search;                  /**< Search dialog active flag */
@@ -130,6 +132,39 @@ static int rows, cols; /**< Current terminal dimensions */
 // -----------------------------------------------------------------------------
 
 /**
+ * @brief Case‑insensitive substring search (portable replacement for
+ * strcasestr).
+ *
+ * @param[in] haystack String to search in.
+ * @param[in] needle   Substring to search for.
+ * @return Pointer to the first occurrence of needle within haystack, or NULL if
+ * not found.
+ */
+static char *str_case_str(const char *haystack, const char *needle) {
+    if (!*needle)
+        return (char *)haystack;
+
+    size_t needle_len = strlen(needle);
+
+    for (const char *p = haystack; *p; p++) {
+        if (tolower((unsigned char)*p) == tolower((unsigned char)*needle)) {
+            size_t i;
+
+            for (i = 1; i < needle_len; i++) {
+                if (tolower((unsigned char)p[i]) != tolower((unsigned char)needle[i])) {
+                    break;
+                }
+            }
+
+            if (i == needle_len) {
+                return (char *)p;
+            }
+        }
+    }
+    return NULL;
+}
+
+/**
  * @brief Run a shell command and capture its standard output.
  *
  * @param[in] cmd The shell command to execute.
@@ -140,10 +175,25 @@ static int rows, cols; /**< Current terminal dimensions */
 static int run_cmd(const char *cmd, //
                    char       *out,
                    size_t      sz) {
+    char old_cwd[4096];
+    int  have_old = 0;
+
+    if (getcwd(old_cwd, sizeof(old_cwd)) != NULL) {
+        have_old = 1;
+        if (chdir("/") == -1) {
+            /* ignore – best effort */
+        }
+    }
+
     FILE *fp = popen(cmd, "r");
     if (!fp) {
         if (out)
             out[0] = '\0';
+        if (have_old) {
+            if (chdir(old_cwd) == -1) {
+                /* ignore */
+            }
+        }
         return -1;
     }
 
@@ -158,6 +208,12 @@ static int run_cmd(const char *cmd, //
     }
 
     int status = pclose(fp);
+    if (have_old) {
+        if (chdir(old_cwd) == -1) {
+            /* ignore */
+        }
+    }
+
     if (WIFEXITED(status)) {
         return WEXITSTATUS(status);
     }
@@ -323,20 +379,20 @@ static void parse_ps_into(const char *out, //
 /**
  * @brief Compute optimal column widths from local arrays.
  *
- * @param[in] models Array of installed models.
- * @param[in] model_cnt Number of installed models.
- * @param[in] running Array of running models.
+ * @param[in] models      Array of installed models.
+ * @param[in] model_cnt   Number of installed models.
+ * @param[in] running     Array of running models.
  * @param[in] running_cnt Number of running models.
- * @param[out] col_name  Installed tab: width for model name.
- * @param[out] col_id    Installed tab: width for ID.
- * @param[out] col_size  Installed tab: width for size.
- * @param[out] col_date  Installed tab: width for date.
- * @param[out] rcol_name Running tab: width for model name.
- * @param[out] rcol_id   Running tab: width for ID.
- * @param[out] rcol_size Running tab: width for size.
- * @param[out] rcol_proc Running tab: width for processor.
- * @param[out] rcol_ctx  Running tab: width for context.
- * @param[out] rcol_exp  Running tab: width for expires.
+ * @param[out] col_name   Installed tab: width for model name.
+ * @param[out] col_id     Installed tab: width for ID.
+ * @param[out] col_size   Installed tab: width for size.
+ * @param[out] col_date   Installed tab: width for date.
+ * @param[out] rcol_name  Running tab: width for model name.
+ * @param[out] rcol_id    Running tab: width for ID.
+ * @param[out] rcol_size  Running tab: width for size.
+ * @param[out] rcol_proc  Running tab: width for processor.
+ * @param[out] rcol_ctx   Running tab: width for context.
+ * @param[out] rcol_exp   Running tab: width for expires.
  */
 static void compute_widths_from(const Model   *models, //
                                 int            model_cnt,
@@ -462,18 +518,20 @@ static void refresh_data(void) {
     memcpy(st.models , local_models , sizeof(Model  ) * local_model_cnt  );
     memcpy(st.running, local_running, sizeof(Running) * local_running_cnt);
     // clang-format on
-    st.model_cnt   = local_model_cnt;
-    st.running_cnt = local_running_cnt;
-    st.col_name    = local_col_name;
-    st.col_id      = local_col_id;
-    st.col_size    = local_col_size;
-    st.col_date    = local_col_date;
-    st.rcol_name   = local_rcol_name;
-    st.rcol_id     = local_rcol_id;
-    st.rcol_size   = local_rcol_size;
-    st.rcol_proc   = local_rcol_proc;
-    st.rcol_ctx    = local_rcol_ctx;
-    st.rcol_exp    = local_rcol_exp;
+    st.model_cnt    = local_model_cnt;
+    st.running_cnt  = local_running_cnt;
+    st.col_name     = local_col_name;
+    st.col_id       = local_col_id;
+    st.col_size     = local_col_size;
+    st.col_date     = local_col_date;
+    st.rcol_name    = local_rcol_name;
+    st.rcol_id      = local_rcol_id;
+    st.rcol_size    = local_rcol_size;
+    st.rcol_proc    = local_rcol_proc;
+    st.rcol_ctx     = local_rcol_ctx;
+    st.rcol_exp     = local_rcol_exp;
+    st.need_refresh = 1; /* signal main loop to redraw */
+    st.refreshing   = 0; /* refresh thread finished */
     pthread_mutex_unlock(&st.mutex);
 }
 
@@ -822,7 +880,7 @@ static void draw_model_list(void) {
                 break;
             }
 
-        if (strlen(st.filter) && !strcasestr(st.models[i].name, st.filter)) {
+        if (strlen(st.filter) && !str_case_str(st.models[i].name, st.filter)) {
             continue;
         }
 
@@ -1166,9 +1224,8 @@ static void log_msg(const char *fmt, ...) {
  * @return NULL.
  */
 static void *refresh_thread(void *arg) {
-    (void)arg; /* unused */
-    refresh_data();
-    st.need_refresh = 1;
+    (void)arg;      /* unused */
+    refresh_data(); /* this sets st.need_refresh and clears st.refreshing */
     return NULL;
 }
 
@@ -1183,8 +1240,17 @@ static void *refresh_thread(void *arg) {
  */
 static void execute_pull_model(const char *model_name) {
     char cmd[MAX_LINE_LEN];
-
     snprintf(cmd, sizeof(cmd), "ollama pull %s", model_name);
+
+    char old_cwd[4096];
+    int  have_old = 0;
+    if (getcwd(old_cwd, sizeof(old_cwd)) != NULL) {
+        have_old = 1;
+        if (chdir("/") == -1) {
+            /* ignore – best effort */
+        }
+    }
+
     printf("\n");
     printf("┌─────────────────────────────────────────────────────────────────────┐\n");
     printf("│                            PULLING MODEL                            │\n");
@@ -1204,14 +1270,20 @@ static void execute_pull_model(const char *model_name) {
     fflush(stdout);
     getchar();
 
+    if (have_old) {
+        if (chdir(old_cwd) == -1) {
+            /* ignore */
+        }
+    }
+
     reset_prog_mode();
-    init_ncurses();
+    clearok(stdscr, TRUE);
     refresh_data();
+    st.pulling = 0;
+    memset(st.dialog_input, 0, sizeof(st.dialog_input));
     snprintf(st.status, sizeof(st.status), "Pull complete");
     snprintf(st.logmsg, sizeof(st.logmsg), "Pulled model: %s", model_name);
     full_refresh();
-    st.pulling = 0;
-    memset(st.dialog_input, 0, sizeof(st.dialog_input));
 }
 
 /**
@@ -1350,23 +1422,27 @@ static void handle_confirm_dialog_keys(void) {
 /**
  * @brief Get the name of the currently selected model (filtered).
  *
- * @return Pointer to the selected model name, or NULL if none selected.
+ * @param[out] out_buf Destination buffer (must have at least MAX_NAME_LEN
+ * bytes).
+ * @return 1 if a name was copied, 0 if none selected.
  */
-static char *get_selected_model_name(void) {
-    int   vis  = 0;
-    char *name = NULL;
+static int get_selected_model_name(char *out_buf) {
+    int vis   = 0;
+    int found = 0;
+
     pthread_mutex_lock(&st.mutex);
     for (int i = 0; i < st.model_cnt; i++) {
-        if (!strlen(st.filter) || strcasestr(st.models[i].name, st.filter)) {
+        if (!strlen(st.filter) || str_case_str(st.models[i].name, st.filter)) {
             if (vis == st.sel_model) {
-                name = st.models[i].name;
+                snprintf(out_buf, MAX_NAME_LEN, "%s", st.models[i].name);
+                found = 1;
                 break;
             }
             vis++;
         }
     }
     pthread_mutex_unlock(&st.mutex);
-    return name;
+    return found;
 }
 
 /**
@@ -1376,9 +1452,10 @@ static char *get_selected_model_name(void) {
  */
 static int get_visible_model_count(void) {
     int vis = 0;
+
     pthread_mutex_lock(&st.mutex);
     for (int i = 0; i < st.model_cnt; i++)
-        if (!strlen(st.filter) || strcasestr(st.models[i].name, st.filter))
+        if (!strlen(st.filter) || str_case_str(st.models[i].name, st.filter))
             vis++;
     pthread_mutex_unlock(&st.mutex);
     return vis;
@@ -1397,24 +1474,34 @@ static void handle_main_keys(int ch) {
             exit(0);
 
         case 'r':
-        case 'R':
+        case 'R': {
+            pthread_mutex_lock(&st.mutex);
+            if (st.refreshing) {
+                pthread_mutex_unlock(&st.mutex);
+                log_msg("Refresh already in progress...");
+                break;
+            }
+            st.refreshing = 1;
+            pthread_mutex_unlock(&st.mutex);
+
             snprintf(st.status, sizeof(st.status), "Refreshing...");
             draw_header();
             refresh();
+
             pthread_t tid;
             pthread_create(&tid, NULL, refresh_thread, NULL);
             pthread_detach(tid);
-            break;
+        } break;
 
         case 'i':
         case 'I':
             if (st.tab == 0 && st.model_cnt) {
-                char *name = get_selected_model_name();
-                if (name) {
-                    show_info(name);
+                char name_buf[MAX_NAME_LEN];
+                if (get_selected_model_name(name_buf)) {
+                    show_info(name_buf);
                     draw_info_dialog();
                     refresh();
-                    log_msg("Info for %s", name);
+                    log_msg("Info for %s", name_buf);
                 }
             }
             break;
@@ -1468,10 +1555,12 @@ static void handle_main_keys(int ch) {
         case 'd':
         case 'D':
             if (st.tab == 0 && st.model_cnt) {
-                char *name = get_selected_model_name();
-                if (name) {
-                    snprintf(st.confirm_msg, sizeof(st.confirm_msg), "Delete model '%s' ?", name);
-                    snprintf(st.confirm_target, MAX_NAME_LEN, "%s", name);
+                char name_buf[MAX_NAME_LEN];
+                if (get_selected_model_name(name_buf)) {
+                    // clang-format off
+                    snprintf(st.confirm_msg   , sizeof(st.confirm_msg), "Delete model '%s' ?", name_buf);
+                    snprintf(st.confirm_target, MAX_NAME_LEN          , "%s"                 , name_buf);
+                    // clang-format on
                     st.confirm_is_delete = 1;
                     st.confirm_choice    = 1;
                     st.confirm_active    = 1;
@@ -1484,14 +1573,28 @@ static void handle_main_keys(int ch) {
         case 's':
         case 'S':
             if (st.tab == 1 && st.running_cnt) {
-                char *name = st.running[st.sel_running].name;
-                snprintf(st.confirm_msg, sizeof(st.confirm_msg), "Stop model '%s' ?", name);
-                snprintf(st.confirm_target, MAX_NAME_LEN, "%s", name);
-                st.confirm_is_delete = 0;
-                st.confirm_choice    = 1;
-                st.confirm_active    = 1;
-                draw_confirm_dialog();
-                refresh();
+                /* Copy name under lock */
+                char name_buf[MAX_NAME_LEN];
+
+                pthread_mutex_lock(&st.mutex);
+                if (st.sel_running < st.running_cnt) {
+                    snprintf(name_buf, MAX_NAME_LEN, "%s", st.running[st.sel_running].name);
+                } else {
+                    name_buf[0] = '\0';
+                }
+                pthread_mutex_unlock(&st.mutex);
+
+                if (name_buf[0]) {
+                    // clang-format off
+                    snprintf(st.confirm_msg   , sizeof(st.confirm_msg), "Stop model '%s' ?", name_buf);
+                    snprintf(st.confirm_target, MAX_NAME_LEN          , "%s"               , name_buf);
+                    // clang-format on
+                    st.confirm_is_delete = 0;
+                    st.confirm_choice    = 1;
+                    st.confirm_active    = 1;
+                    draw_confirm_dialog();
+                    refresh();
+                }
             }
             break;
 
@@ -1560,8 +1663,15 @@ int main(void) {
     int ch;
 
     while (1) {
-        if (st.need_refresh) {
+        pthread_mutex_lock(&st.mutex);
+        int need_refresh = st.need_refresh;
+        pthread_mutex_unlock(&st.mutex);
+
+        if (need_refresh) {
+            pthread_mutex_lock(&st.mutex);
             st.need_refresh = 0;
+            pthread_mutex_unlock(&st.mutex);
+
             snprintf(st.status, sizeof(st.status), "Refreshed");
             snprintf(st.logmsg, sizeof(st.logmsg), "Loaded %d model(s), %d running", st.model_cnt, st.running_cnt);
             full_refresh();
@@ -1602,3 +1712,7 @@ int main(void) {
     pthread_mutex_destroy(&st.mutex);
     return 0;
 }
+
+/* *****************************************************************************
+ End of File
+ */
