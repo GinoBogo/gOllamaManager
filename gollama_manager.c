@@ -503,6 +503,74 @@ static void compute_widths_from(const Model   *models, //
 }
 
 // -----------------------------------------------------------------------------
+// Model Operations (Delete, Stop, Show Info)
+// -----------------------------------------------------------------------------
+
+/**
+ * @brief Remove a model from the Ollama server.
+ *
+ * @param[in] name The name of the model to remove.
+ */
+static void remove_model(const char *name) {
+    char cmd[MAX_LINE_LEN];
+    char out[MAX_LOG_LEN - 32];
+
+    snprintf(cmd, sizeof(cmd), "ollama rm %s 2>&1", name);
+
+    int ret = run_cmd(cmd, out, sizeof(out));
+    if (ret == 0) {
+        snprintf(st.logmsg, sizeof(st.logmsg), "Removed model: %s", name);
+        snprintf(st.status, sizeof(st.status), "Model removed");
+    } else {
+        size_t len = strlen(out);
+        if (len > 0 && out[len - 1] == '\n') {
+            out[len - 1] = '\0';
+        }
+        snprintf(st.logmsg, sizeof(st.logmsg), "Failed to remove %s: %s", name, out);
+        snprintf(st.status, sizeof(st.status), "Delete failed");
+    }
+}
+
+/**
+ * @brief Stop a running model.
+ *
+ * @param[in] name The name of the running model to stop.
+ */
+static void stop_model(const char *name) {
+    char cmd[MAX_LINE_LEN];
+    char out[MAX_LOG_LEN - 32];
+
+    snprintf(cmd, sizeof(cmd), "ollama stop %s 2>&1", name);
+
+    int ret = run_cmd(cmd, out, sizeof(out));
+    if (ret == 0) {
+        snprintf(st.logmsg, sizeof(st.logmsg), "Stopped model: %s", name);
+        snprintf(st.status, sizeof(st.status), "Model stopped");
+    } else {
+        size_t len = strlen(out);
+        if (len > 0 && out[len - 1] == '\n') {
+            out[len - 1] = '\0';
+        }
+        snprintf(st.logmsg, sizeof(st.logmsg), "Failed to stop %s: %s", name, out);
+        snprintf(st.status, sizeof(st.status), "Stop failed");
+    }
+}
+
+/**
+ * @brief Retrieve detailed information about a model and show the info dialog.
+ *
+ * @param[in] name The name of the model to inspect.
+ */
+static void show_info(const char *name) {
+    char cmd[MAX_LINE_LEN];
+
+    snprintf(cmd, sizeof(cmd), "ollama show %s 2>&1", name);
+
+    run_cmd(cmd, st.info_out, sizeof(st.info_out));
+    st.show_info = 1;
+}
+
+// -----------------------------------------------------------------------------
 // Data Refresh (no ncurses calls – thread safe with brief lock)
 // -----------------------------------------------------------------------------
 
@@ -573,74 +641,6 @@ static void refresh_data(void) {
 }
 
 // -----------------------------------------------------------------------------
-// Model Operations (Delete, Stop, Show Info)
-// -----------------------------------------------------------------------------
-
-/**
- * @brief Remove a model from the Ollama server.
- *
- * @param[in] name The name of the model to remove.
- */
-static void remove_model(const char *name) {
-    char cmd[MAX_LINE_LEN];
-    char out[MAX_LOG_LEN - 32];
-
-    snprintf(cmd, sizeof(cmd), "ollama rm %s 2>&1", name);
-
-    int ret = run_cmd(cmd, out, sizeof(out));
-    if (ret == 0) {
-        snprintf(st.logmsg, sizeof(st.logmsg), "Removed model: %s", name);
-        snprintf(st.status, sizeof(st.status), "Model removed");
-    } else {
-        size_t len = strlen(out);
-        if (len > 0 && out[len - 1] == '\n') {
-            out[len - 1] = '\0';
-        }
-        snprintf(st.logmsg, sizeof(st.logmsg), "Failed to remove %s: %s", name, out);
-        snprintf(st.status, sizeof(st.status), "Delete failed");
-    }
-}
-
-/**
- * @brief Stop a running model.
- *
- * @param[in] name The name of the running model to stop.
- */
-static void stop_model(const char *name) {
-    char cmd[MAX_LINE_LEN];
-    char out[MAX_LOG_LEN - 32];
-
-    snprintf(cmd, sizeof(cmd), "ollama stop %s 2>&1", name);
-
-    int ret = run_cmd(cmd, out, sizeof(out));
-    if (ret == 0) {
-        snprintf(st.logmsg, sizeof(st.logmsg), "Stopped model: %s", name);
-        snprintf(st.status, sizeof(st.status), "Model stopped");
-    } else {
-        size_t len = strlen(out);
-        if (len > 0 && out[len - 1] == '\n') {
-            out[len - 1] = '\0';
-        }
-        snprintf(st.logmsg, sizeof(st.logmsg), "Failed to stop %s: %s", name, out);
-        snprintf(st.status, sizeof(st.status), "Stop failed");
-    }
-}
-
-/**
- * @brief Retrieve detailed information about a model and show the info dialog.
- *
- * @param[in] name The name of the model to inspect.
- */
-static void show_info(const char *name) {
-    char cmd[MAX_LINE_LEN];
-
-    snprintf(cmd, sizeof(cmd), "ollama show %s 2>&1", name);
-
-    run_cmd(cmd, st.info_out, sizeof(st.info_out));
-    st.show_info = 1;
-}
-
-// -----------------------------------------------------------------------------
 // ncurses Initialization & Cleanup
 // -----------------------------------------------------------------------------
 
@@ -684,7 +684,7 @@ static inline void cleanup(void) {
 }
 
 // -----------------------------------------------------------------------------
-// UI Drawing – Header, Footer, Tabs, Lists, Log, Dialogs
+// UI Drawing – Box, Header, Footer, Tabs, Lists, Log, Dialogs
 // -----------------------------------------------------------------------------
 
 /**
@@ -1223,6 +1223,10 @@ static void draw_confirm_dialog(void) {
     attroff(COLOR_PAIR(CP_ACCENT) | A_BOLD);
 }
 
+// -----------------------------------------------------------------------------
+// Full Refresh and Logging
+// -----------------------------------------------------------------------------
+
 /**
  * @brief Perform a full screen refresh (redraw everything).
  *
@@ -1514,7 +1518,7 @@ static void handle_main_keys(int ch) {
             cleanup();
             clear_term();
             pthread_mutex_destroy(&st.mutex);
-            printf("\nGoodbye.\n");
+            printf("\nDo svidaniya.\n");
             exit(0);
 
         case 'r':
