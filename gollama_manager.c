@@ -17,16 +17,15 @@
 */
 /* ************************************************************************** */
 
-#include <ctype.h>
-#include <locale.h>
-#include <ncurses.h>
-#include <pthread.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/wait.h>
-#include <unistd.h>
+#include <ctype.h>   // isprint, tolower
+#include <locale.h>  // LC_ALL, setlocale
+#include <ncurses.h> // ACS_HLINE, ACS_LLCORNER, ACS_LRCORNER, ACS_LTEE, ACS_RTEE ...
+#include <pthread.h> // pthread_create, pthread_detach, pthread_mutex_destroy, ...
+#include <stdarg.h>  // va_list, va_start, va_end
+#include <stdio.h>   // FILE, fflush, fgets, fprintf, getchar, ...
+#include <stdlib.h>  // WEXITSTATUS, WIFEXITED, exit, system
+#include <string.h>  // memcpy, memset, strcmp, strlen, strtok, ...
+#include <unistd.h>  // NULL, chdir, getcwd
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -125,7 +124,9 @@ static struct {
     int rcol_name, rcol_id, rcol_size, rcol_proc, rcol_ctx, rcol_exp;
 } st;
 
-static int rows, cols; /**< Current terminal dimensions */
+/**< Current terminal dimensions */
+static int rows;
+static int cols;
 
 // -----------------------------------------------------------------------------
 // Helper Functions
@@ -140,9 +141,11 @@ static int rows, cols; /**< Current terminal dimensions */
  * @return Pointer to the first occurrence of needle within haystack, or NULL if
  * not found.
  */
-static char *str_case_str(const char *haystack, const char *needle) {
-    if (!*needle)
+static char *str_case_str(const char *haystack, //
+                          const char *needle) {
+    if (!*needle) {
         return (char *)haystack;
+    }
 
     size_t needle_len = strlen(needle);
 
@@ -165,6 +168,19 @@ static char *str_case_str(const char *haystack, const char *needle) {
 }
 
 /**
+ * @brief Change current working directory to root ("/")
+ *
+ * This function attempts to change the process's working directory to root. If
+ * the operation fails, it is ignored (best effort).
+ */
+static void chdir2root(void) {
+    /* Change current working directory to root */
+    if (chdir("/") == -1) {
+        /* ignore – best effort */
+    }
+}
+
+/**
  * @brief Run a shell command and capture its standard output.
  *
  * @param[in] cmd The shell command to execute.
@@ -180,9 +196,7 @@ static int run_cmd(const char *cmd, //
 
     if (getcwd(old_cwd, sizeof(old_cwd)) != NULL) {
         have_old = 1;
-        if (chdir("/") == -1) {
-            /* ignore – best effort */
-        }
+        chdir2root();
     }
 
     FILE *fp = popen(cmd, "r");
@@ -190,9 +204,7 @@ static int run_cmd(const char *cmd, //
         if (out)
             out[0] = '\0';
         if (have_old) {
-            if (chdir(old_cwd) == -1) {
-                /* ignore */
-            }
+            chdir2root();
         }
         return -1;
     }
@@ -209,9 +221,7 @@ static int run_cmd(const char *cmd, //
 
     int status = pclose(fp);
     if (have_old) {
-        if (chdir(old_cwd) == -1) {
-            /* ignore */
-        }
+        chdir2root();
     }
 
     if (WIFEXITED(status)) {
@@ -1246,9 +1256,7 @@ static void execute_pull_model(const char *model_name) {
     int  have_old = 0;
     if (getcwd(old_cwd, sizeof(old_cwd)) != NULL) {
         have_old = 1;
-        if (chdir("/") == -1) {
-            /* ignore – best effort */
-        }
+        chdir2root();
     }
 
     printf("\n");
@@ -1271,9 +1279,7 @@ static void execute_pull_model(const char *model_name) {
     getchar();
 
     if (have_old) {
-        if (chdir(old_cwd) == -1) {
-            /* ignore */
-        }
+        chdir2root();
     }
 
     reset_prog_mode();
