@@ -180,80 +180,61 @@ static void parse_list_into(const char *out, //
                             Model      *dest,
                             int        *cnt) {
     char work[MAX_CMD_OUT];
-
     snprintf(work, sizeof(work), "%s", out);
-    char *line = strtok(work, "\n");
-    int   ln = 0, c = 0;
+
+    char *line = strtok(work, "\n\r");
+    int   ln   = 0;
+    int   c    = 0;
 
     while (line && c < MAX_MODELS) {
         if (ln++ == 0) {
-            line = strtok(NULL, "\n");
+            line = strtok(NULL, "\n\r");
+            continue; // Skip header row
+        }
+        if (line[0] == '\0') {
+            line = strtok(NULL, "\n\r");
             continue;
         }
 
         char *tok[20];
         int   n = 0;
         char *save;
-        char *p = strtok_r(line, " \t", &save);
-
+        char *p = strtok_r(line, " \t\r", &save);
         while (p && n < 20) {
             tok[n++] = p;
-            p        = strtok_r(NULL, " \t", &save);
+            p        = strtok_r(NULL, " \t\r", &save);
         }
 
-        if (n < 3) {
-            line = strtok(NULL, "\n");
+        /* Ollama list v0.23.0 layout:
+           [0]NAME [1]ID [2]SIZE_VAL [3]SIZE_UNIT [4+]MODIFIED_DATE
+        */
+        if (n < 4) {
+            line = strtok(NULL, "\n\r");
             continue;
         }
 
-        // clang-format off
+        // 1. NAME
         snprintf(dest[c].name, MAX_NAME_LEN, "%s", tok[0]);
-        snprintf(dest[c].id  , MAX_ID_LEN  , "%s", tok[1]);
-        // clang-format on
 
-        /* Locate the date field (contains "ago", "day", "hour", "minute") */
-        int date_start = n;
-        for (int i = 2; i < n; i++) {
-            if (strstr(tok[i], "ago") ||  //
-                strstr(tok[i], "day") ||  //
-                strstr(tok[i], "hour") || //
-                strstr(tok[i], "minute")) {
-                date_start = i;
-                break;
+        // 2. ID
+        snprintf(dest[c].id, MAX_ID_LEN, "%s", tok[1]);
+
+        // 3. SIZE (always 2 tokens, e.g., "4.5 GB")
+        snprintf(dest[c].size, MAX_SIZE_LEN, "%s %s", tok[2], tok[3]);
+
+        // 4. MODIFIED DATE (all remaining tokens from index 4)
+        char date_buf[MAX_DATE_LEN] = "";
+        int  off                    = 0;
+        for (int i = 4; i < n; i++) {
+            if (i > 4) {
+                off += snprintf(date_buf + off, MAX_DATE_LEN - off, " ");
             }
+            off += snprintf(date_buf + off, MAX_DATE_LEN - off, "%s", tok[i]);
         }
-        if (date_start > 2 && date_start <= n) {
-            /* Size = tokens at index 2 and 3 (after `name` and `id`) */
-            char size_buf[MAX_SIZE_LEN] = "";
-            // clang-format off
-            snprintf(size_buf    , sizeof(size_buf), "%s %s", tok[2], tok[3]);
-            snprintf(dest[c].size, MAX_SIZE_LEN    , "%s"   , size_buf      );
-            // clang-format on
+        snprintf(dest[c].date, MAX_DATE_LEN, "%s", date_buf);
 
-            /* Date = remaining tokens */
-            char date_buf[MAX_DATE_LEN] = "";
-
-            for (int i = date_start; i < n; i++) {
-                if (i > date_start) {
-                    strcat(date_buf, " ");
-                }
-                strcat(date_buf, tok[i]);
-            }
-            snprintf(dest[c].date, MAX_DATE_LEN, "%s", date_buf);
-        } else {
-            /* Fallback: size = tok[2], date = tok[3..] */
-            snprintf(dest[c].size, MAX_SIZE_LEN, "%s", tok[2]);
-            char date_buf[MAX_DATE_LEN] = "";
-            for (int i = 3; i < n; i++) {
-                if (i > 3) {
-                    strcat(date_buf, " ");
-                }
-                strcat(date_buf, tok[i]);
-            }
-            snprintf(dest[c].date, MAX_DATE_LEN, "%s", date_buf);
-        }
         c++;
-        line = strtok(NULL, "\n");
+        line = strtok(NULL, "\n\r");
     }
     *cnt = c;
 }
