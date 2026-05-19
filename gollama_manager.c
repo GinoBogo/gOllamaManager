@@ -269,131 +269,68 @@ static void parse_ps_into(const char *out, //
                           Running    *dest,
                           int        *cnt) {
     char work[MAX_CMD_OUT];
-
     snprintf(work, sizeof(work), "%s", out);
-    char *line = strtok(work, "\n");
-    int   ln = 0, c = 0;
+
+    char *line = strtok(work, "\n\r");
+    int   ln   = 0;
+    int   c    = 0;
 
     while (line && c < MAX_MODELS) {
         if (ln++ == 0) {
-            line = strtok(NULL, "\n");
+            line = strtok(NULL, "\n\r");
+            continue; // Skip header row
+        }
+        if (line[0] == '\0') {
+            line = strtok(NULL, "\n\r");
             continue;
         }
 
-        char *tok[20];
+        char *tok[30];
         int   n = 0;
         char *save;
+        char *p = strtok_r(line, " \t\r", &save);
 
-        char *p = strtok_r(line, " \t", &save);
-        while (p && n < 20) {
+        while (p && n < 30) {
             tok[n++] = p;
-            p        = strtok_r(NULL, " \t", &save);
+            p        = strtok_r(NULL, " \t\r", &save);
         }
 
-        /* NAME, ID, SIZE, PROCESSOR%, CONTEXT, EXPIRES... */
-        if (n < 5) {
-            line = strtok(NULL, "\n");
+        /* Ollama ps v0.23.0 layout:
+           [0]NAME [1]ID [2]SIZE_VAL [3]SIZE_UNIT [4]LOAD(%) [5]PROC_TYPE [6]CONTEXT [7+]EXPIRES
+        */
+        if (n < 7) {
+            line = strtok(NULL, "\n\r");
             continue;
         }
-        // clang-format off
+
+        // 1. NAME
         snprintf(dest[c].name, MAX_NAME_LEN, "%s", tok[0]);
-        snprintf(dest[c].id  , MAX_ID_LEN  , "%s", tok[1]);
-        // clang-format on
 
-        /* Find the processor field (contains '%') */
-        int proc_idx = -1;
-        for (int i = 2; i < n; i++) {
-            if (strchr(tok[i], '%')) {
-                proc_idx = i;
-                break;
+        // 2. ID
+        snprintf(dest[c].id, MAX_ID_LEN, "%s", tok[1]);
+
+        // 3. SIZE (always 2 tokens)
+        snprintf(dest[c].size, MAX_SIZE_LEN, "%s %s", tok[2], tok[3]);
+
+        // 4. PROCESSOR (load % + type, e.g., "100% CPU")
+        snprintf(dest[c].proc, MAX_PROC_LEN, "%s %s", tok[4], tok[5]);
+
+        // 5. CONTEXT (numeric token)
+        snprintf(dest[c].context, MAX_CONTEXT_LEN, "%s", tok[6]);
+
+        // 6. EXPIRES (all remaining tokens)
+        char exp_buf[MAX_DATE_LEN] = "";
+        int  off                   = 0;
+        for (int i = 7; i < n; i++) {
+            if (i > 7) {
+                off += snprintf(exp_buf + off, MAX_DATE_LEN - off, " ");
             }
+            off += snprintf(exp_buf + off, MAX_DATE_LEN - off, "%s", tok[i]);
         }
+        snprintf(dest[c].expires, MAX_DATE_LEN, "%s", exp_buf);
 
-        if (proc_idx >= 3 && proc_idx + 2 < n) {
-            /* Size = two tokens before processor */
-            char size_buf[MAX_SIZE_LEN] = "";
-            // clang-format off
-            snprintf(size_buf    , sizeof(size_buf), "%s %s", tok[proc_idx - 2], tok[proc_idx - 1]);
-            snprintf(dest[c].size, MAX_SIZE_LEN    , "%s"   , size_buf);
-            // clang-format on
-
-            /* Processor: percentage + next token if it's CPU/GPU */
-            char proc_buf[MAX_PROC_LEN] = "";
-            snprintf(proc_buf, sizeof(proc_buf), "%s", tok[proc_idx]);
-
-            if (proc_idx + 1 < n &&                           //
-                (strcasecmp(tok[proc_idx + 1], "CPU") == 0 || //
-                 strcasecmp(tok[proc_idx + 1], "GPU") == 0)) {
-                // clang-format off
-                strncat(proc_buf, " "              , sizeof(proc_buf) - strlen(proc_buf) - 1);
-                strncat(proc_buf, tok[proc_idx + 1], sizeof(proc_buf) - strlen(proc_buf) - 1);
-                // clang-format on
-                proc_idx++; /* skip the CPU/GPU token */
-            }
-            snprintf(dest[c].proc, MAX_PROC_LEN, "%s", proc_buf);
-
-            /* Next token after processor is the CONTEXT (numeric) */
-            int ctx_idx = proc_idx + 1;
-            if (ctx_idx < n) {
-                snprintf(dest[c].context, MAX_CONTEXT_LEN, "%s", tok[ctx_idx]);
-            } else {
-                snprintf(dest[c].context, MAX_CONTEXT_LEN, "?");
-            }
-
-            /* Expires = all remaining tokens after context */
-            char exp_buf[MAX_DATE_LEN] = "";
-            for (int i = ctx_idx + 1; i < n; i++) {
-                if (i > ctx_idx + 1) {
-                    strcat(exp_buf, " ");
-                }
-                strcat(exp_buf, tok[i]);
-            }
-            snprintf(dest[c].expires, MAX_DATE_LEN, "%s", exp_buf);
-        } else {
-            /* Fallback for older ollama ps output (without CONTEXT) */
-            snprintf(dest[c].size, MAX_SIZE_LEN, "%s", tok[2]);
-            if (n >= 4) {
-                char proc_buf[MAX_PROC_LEN] = "";
-                snprintf(proc_buf, sizeof(proc_buf), "%s", tok[3]);
-
-                if (n >= 5 &&                          //
-                    (strcasecmp(tok[4], "CPU") == 0 || //
-                     strcasecmp(tok[4], "GPU") == 0)) {
-                    // clang-format off
-                    strncat(proc_buf, " "   , sizeof(proc_buf) - strlen(proc_buf) - 1);
-                    strncat(proc_buf, tok[4], sizeof(proc_buf) - strlen(proc_buf) - 1);
-
-                    snprintf(dest[c].proc   , MAX_PROC_LEN   , "%s", proc_buf);
-                    snprintf(dest[c].context, MAX_CONTEXT_LEN, "N/A"         );
-                    // clang-format on
-
-                    char exp_buf[MAX_DATE_LEN] = "";
-                    for (int i = 5; i < n; i++) {
-                        if (i > 5) {
-                            strcat(exp_buf, " ");
-                        }
-                        strcat(exp_buf, tok[i]);
-                    }
-                    snprintf(dest[c].expires, MAX_DATE_LEN, "%s", exp_buf);
-                } else {
-                    // clang-format off
-                    snprintf(dest[c].proc   , MAX_PROC_LEN   , "%s", tok[3]);
-                    snprintf(dest[c].context, MAX_CONTEXT_LEN, "N/A"       );
-                    // clang-format on
-
-                    char exp_buf[MAX_DATE_LEN] = "";
-                    for (int i = 4; i < n; i++) {
-                        if (i > 4) {
-                            strcat(exp_buf, " ");
-                        }
-                        strcat(exp_buf, tok[i]);
-                    }
-                    snprintf(dest[c].expires, MAX_DATE_LEN, "%s", exp_buf);
-                }
-            }
-        }
         c++;
-        line = strtok(NULL, "\n");
+        line = strtok(NULL, "\n\r");
     }
     *cnt = c;
 }
