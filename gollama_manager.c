@@ -166,22 +166,26 @@ static int run_cmd(const char *cmd, //
 }
 
 // -----------------------------------------------------------------------------
-// Parsing: `ollama list` and `ollama ps` (plain text)
+// Parsing: `ollama list` and `ollama ps` (plain text) into local buffers
 // -----------------------------------------------------------------------------
 
 /**
- * @brief Parse the output of `ollama list` and populate the models array.
+ * @brief Parse the output of `ollama list` into a local Model array.
  *
  * @param[in] out The raw text output from `ollama list`.
+ * @param[out] dest Destination Model array.
+ * @param[out] cnt Number of models parsed (set by the function).
  */
-static void parse_list(const char *out) {
+static void parse_list_into(const char *out, //
+                            Model      *dest,
+                            int        *cnt) {
     char work[MAX_CMD_OUT];
 
     snprintf(work, sizeof(work), "%s", out);
     char *line = strtok(work, "\n");
-    int   ln = 0, cnt = 0;
+    int   ln = 0, c = 0;
 
-    while (line && cnt < MAX_MODELS) {
+    while (line && c < MAX_MODELS) {
         if (ln++ == 0) {
             line = strtok(NULL, "\n");
             continue;
@@ -201,9 +205,10 @@ static void parse_list(const char *out) {
             line = strtok(NULL, "\n");
             continue;
         }
+
         // clang-format off
-        snprintf(st.models[cnt].name, MAX_NAME_LEN, "%s", tok[0]);
-        snprintf(st.models[cnt].id  , MAX_ID_LEN  , "%s", tok[1]);
+        snprintf(dest[c].name, MAX_NAME_LEN, "%s", tok[0]);
+        snprintf(dest[c].id  , MAX_ID_LEN  , "%s", tok[1]);
         // clang-format on
 
         /* Locate the date field (contains "ago", "day", "hour", "minute") */
@@ -220,20 +225,24 @@ static void parse_list(const char *out) {
         if (date_start > 2 && date_start <= n) {
             /* Size = tokens at index 2 and 3 (after `name` and `id`) */
             char size_buf[MAX_SIZE_LEN] = "";
-            snprintf(size_buf, sizeof(size_buf), "%s %s", tok[2], tok[3]);
-            snprintf(st.models[cnt].size, MAX_SIZE_LEN, "%s", size_buf);
+            // clang-format off
+            snprintf(size_buf    , sizeof(size_buf), "%s %s", tok[2], tok[3]);
+            snprintf(dest[c].size, MAX_SIZE_LEN    , "%s"   , size_buf      );
+            // clang-format on
+
             /* Date = remaining tokens */
             char date_buf[MAX_DATE_LEN] = "";
+
             for (int i = date_start; i < n; i++) {
                 if (i > date_start) {
                     strcat(date_buf, " ");
                 }
                 strcat(date_buf, tok[i]);
             }
-            snprintf(st.models[cnt].date, MAX_DATE_LEN, "%s", date_buf);
+            snprintf(dest[c].date, MAX_DATE_LEN, "%s", date_buf);
         } else {
             /* Fallback: size = tok[2], date = tok[3..] */
-            snprintf(st.models[cnt].size, MAX_SIZE_LEN, "%s", tok[2]);
+            snprintf(dest[c].size, MAX_SIZE_LEN, "%s", tok[2]);
             char date_buf[MAX_DATE_LEN] = "";
             for (int i = 3; i < n; i++) {
                 if (i > 3) {
@@ -241,27 +250,31 @@ static void parse_list(const char *out) {
                 }
                 strcat(date_buf, tok[i]);
             }
-            snprintf(st.models[cnt].date, MAX_DATE_LEN, "%s", date_buf);
+            snprintf(dest[c].date, MAX_DATE_LEN, "%s", date_buf);
         }
-        cnt++;
+        c++;
         line = strtok(NULL, "\n");
     }
-    st.model_cnt = cnt;
+    *cnt = c;
 }
 
 /**
- * @brief Parse the output of `ollama ps` and populate the running array.
+ * @brief Parse the output of `ollama ps` into a local Running array.
  *
  * @param[in] out The raw text output from `ollama ps`.
+ * @param[out] dest Destination Running array.
+ * @param[out] cnt Number of running models parsed (set by the function).
  */
-static void parse_ps(const char *out) {
+static void parse_ps_into(const char *out, //
+                          Running    *dest,
+                          int        *cnt) {
     char work[MAX_CMD_OUT];
 
     snprintf(work, sizeof(work), "%s", out);
     char *line = strtok(work, "\n");
-    int   ln = 0, cnt = 0;
+    int   ln = 0, c = 0;
 
-    while (line && cnt < MAX_MODELS) {
+    while (line && c < MAX_MODELS) {
         if (ln++ == 0) {
             line = strtok(NULL, "\n");
             continue;
@@ -277,13 +290,14 @@ static void parse_ps(const char *out) {
             p        = strtok_r(NULL, " \t", &save);
         }
 
-        if (n < 5) { /* NAME, ID, SIZE, PROCESSOR%, CONTEXT, EXPIRES... */
+        /* NAME, ID, SIZE, PROCESSOR%, CONTEXT, EXPIRES... */
+        if (n < 5) {
             line = strtok(NULL, "\n");
             continue;
         }
         // clang-format off
-        snprintf(st.running[cnt].name, MAX_NAME_LEN, "%s", tok[0]);
-        snprintf(st.running[cnt].id  , MAX_ID_LEN  , "%s", tok[1]);
+        snprintf(dest[c].name, MAX_NAME_LEN, "%s", tok[0]);
+        snprintf(dest[c].id  , MAX_ID_LEN  , "%s", tok[1]);
         // clang-format on
 
         /* Find the processor field (contains '%') */
@@ -299,8 +313,8 @@ static void parse_ps(const char *out) {
             /* Size = two tokens before processor */
             char size_buf[MAX_SIZE_LEN] = "";
             // clang-format off
-            snprintf(size_buf            , sizeof(size_buf), "%s %s", tok[proc_idx - 2], tok[proc_idx - 1]);
-            snprintf(st.running[cnt].size, MAX_SIZE_LEN    , "%s"   , size_buf);
+            snprintf(size_buf    , sizeof(size_buf), "%s %s", tok[proc_idx - 2], tok[proc_idx - 1]);
+            snprintf(dest[c].size, MAX_SIZE_LEN    , "%s"   , size_buf);
             // clang-format on
 
             /* Processor: percentage + next token if it's CPU/GPU */
@@ -316,14 +330,14 @@ static void parse_ps(const char *out) {
                 // clang-format on
                 proc_idx++; /* skip the CPU/GPU token */
             }
-            snprintf(st.running[cnt].proc, MAX_PROC_LEN, "%s", proc_buf);
+            snprintf(dest[c].proc, MAX_PROC_LEN, "%s", proc_buf);
 
             /* Next token after processor is the CONTEXT (numeric) */
             int ctx_idx = proc_idx + 1;
             if (ctx_idx < n) {
-                snprintf(st.running[cnt].context, MAX_CONTEXT_LEN, "%s", tok[ctx_idx]);
+                snprintf(dest[c].context, MAX_CONTEXT_LEN, "%s", tok[ctx_idx]);
             } else {
-                snprintf(st.running[cnt].context, MAX_CONTEXT_LEN, "?");
+                snprintf(dest[c].context, MAX_CONTEXT_LEN, "?");
             }
 
             /* Expires = all remaining tokens after context */
@@ -334,10 +348,10 @@ static void parse_ps(const char *out) {
                 }
                 strcat(exp_buf, tok[i]);
             }
-            snprintf(st.running[cnt].expires, MAX_DATE_LEN, "%s", exp_buf);
+            snprintf(dest[c].expires, MAX_DATE_LEN, "%s", exp_buf);
         } else {
             /* Fallback for older ollama ps output (without CONTEXT) */
-            snprintf(st.running[cnt].size, MAX_SIZE_LEN, "%s", tok[2]);
+            snprintf(dest[c].size, MAX_SIZE_LEN, "%s", tok[2]);
             if (n >= 4) {
                 char proc_buf[MAX_PROC_LEN] = "";
                 snprintf(proc_buf, sizeof(proc_buf), "%s", tok[3]);
@@ -349,8 +363,8 @@ static void parse_ps(const char *out) {
                     strncat(proc_buf, " "   , sizeof(proc_buf) - strlen(proc_buf) - 1);
                     strncat(proc_buf, tok[4], sizeof(proc_buf) - strlen(proc_buf) - 1);
 
-                    snprintf(st.running[cnt].proc   , MAX_PROC_LEN   , "%s", proc_buf);
-                    snprintf(st.running[cnt].context, MAX_CONTEXT_LEN, "N/A");
+                    snprintf(dest[c].proc   , MAX_PROC_LEN   , "%s", proc_buf);
+                    snprintf(dest[c].context, MAX_CONTEXT_LEN, "N/A"         );
                     // clang-format on
 
                     char exp_buf[MAX_DATE_LEN] = "";
@@ -360,11 +374,11 @@ static void parse_ps(const char *out) {
                         }
                         strcat(exp_buf, tok[i]);
                     }
-                    snprintf(st.running[cnt].expires, MAX_DATE_LEN, "%s", exp_buf);
+                    snprintf(dest[c].expires, MAX_DATE_LEN, "%s", exp_buf);
                 } else {
                     // clang-format off
-                    snprintf(st.running[cnt].proc   , MAX_PROC_LEN   , "%s", tok[3]);
-                    snprintf(st.running[cnt].context, MAX_CONTEXT_LEN, "N/A");
+                    snprintf(dest[c].proc   , MAX_PROC_LEN   , "%s", tok[3]);
+                    snprintf(dest[c].context, MAX_CONTEXT_LEN, "N/A"       );
                     // clang-format on
 
                     char exp_buf[MAX_DATE_LEN] = "";
@@ -374,37 +388,63 @@ static void parse_ps(const char *out) {
                         }
                         strcat(exp_buf, tok[i]);
                     }
-                    snprintf(st.running[cnt].expires, MAX_DATE_LEN, "%s", exp_buf);
+                    snprintf(dest[c].expires, MAX_DATE_LEN, "%s", exp_buf);
                 }
             }
         }
-        cnt++;
+        c++;
         line = strtok(NULL, "\n");
     }
-    st.running_cnt = cnt;
+    *cnt = c;
 }
 
 // -----------------------------------------------------------------------------
-// Dynamic Column Width Calculation
+// Dynamic Column Width Calculation (local buffers)
 // -----------------------------------------------------------------------------
 
 /**
- * @brief Compute optimal column widths for both tabs based on current data.
+ * @brief Compute optimal column widths from local arrays.
  *
- * Updates st.col_* and st.rcol_* fields with calculated widths.
+ * @param[in] models Array of installed models.
+ * @param[in] model_cnt Number of installed models.
+ * @param[in] running Array of running models.
+ * @param[in] running_cnt Number of running models.
+ * @param[out] col_name  Installed tab: width for model name.
+ * @param[out] col_id    Installed tab: width for ID.
+ * @param[out] col_size  Installed tab: width for size.
+ * @param[out] col_date  Installed tab: width for date.
+ * @param[out] rcol_name Running tab: width for model name.
+ * @param[out] rcol_id   Running tab: width for ID.
+ * @param[out] rcol_size Running tab: width for size.
+ * @param[out] rcol_proc Running tab: width for processor.
+ * @param[out] rcol_ctx  Running tab: width for context.
+ * @param[out] rcol_exp  Running tab: width for expires.
  */
-static void compute_widths(void) {
+static void compute_widths_from(const Model   *models, //
+                                int            model_cnt,
+                                const Running *running,
+                                int            running_cnt,
+                                int           *col_name,
+                                int           *col_id,
+                                int           *col_size,
+                                int           *col_date,
+                                int           *rcol_name,
+                                int           *rcol_id,
+                                int           *rcol_size,
+                                int           *rcol_proc,
+                                int           *rcol_ctx,
+                                int           *rcol_exp) {
     // clang-format off
     int w_name = strlen("MODEL NAME");
     int w_id   = strlen("ID"        );
     int w_size = strlen("SIZE"      );
     int w_date = strlen("MODIFIED"  );
 
-    for (int i = 0, l; i < st.model_cnt; i++) {
-        l = strlen(st.models[i].name); if (l > w_name) { w_name = l; }
-        l = strlen(st.models[i].id  ); if (l > w_id  ) { w_id   = l; }
-        l = strlen(st.models[i].size); if (l > w_size) { w_size = l; }
-        l = strlen(st.models[i].date); if (l > w_date) { w_date = l; }
+    for (int i = 0, l; i < model_cnt; i++) {
+        l = strlen(models[i].name); if (l > w_name) { w_name = l; }
+        l = strlen(models[i].id  ); if (l > w_id  ) { w_id   = l; }
+        l = strlen(models[i].size); if (l > w_size) { w_size = l; }
+        l = strlen(models[i].date); if (l > w_date) { w_date = l; }
     }
     w_name += 2; /* for the "* " prefix on running models */
 
@@ -412,11 +452,11 @@ static void compute_widths(void) {
     if (w_id   > MAX_COL_WIDTH) { w_id   = MAX_COL_WIDTH; }
     if (w_size > MAX_COL_WIDTH) { w_size = MAX_COL_WIDTH; }
     if (w_date > MAX_COL_WIDTH) { w_date = MAX_COL_WIDTH; }
-    
-    st.col_name = w_name + MIN_COL_PAD;
-    st.col_id   = w_id   + MIN_COL_PAD;
-    st.col_size = w_size + MIN_COL_PAD;
-    st.col_date = w_date + MIN_COL_PAD;
+
+    *col_name = w_name + MIN_COL_PAD;
+    *col_id   = w_id   + MIN_COL_PAD;
+    *col_size = w_size + MIN_COL_PAD;
+    *col_date = w_date + MIN_COL_PAD;
 
     /* Running tab columns */
     w_name     = strlen("MODEL NAME");
@@ -426,14 +466,13 @@ static void compute_widths(void) {
     int w_ctx  = strlen("CONTEXT"   );
     int w_exp  = strlen("EXPIRES"   );
 
-    for (int i = 0, l; i < st.running_cnt; i++) {
-                                        l = strlen(st.running[i].name   );
-        if (l > w_name) { w_name = l; } l = strlen(st.running[i].id     );
-        if (l > w_id  ) { w_id   = l; } l = strlen(st.running[i].size   );
-        if (l > w_size) { w_size = l; } l = strlen(st.running[i].proc   );
-        if (l > w_proc) { w_proc = l; } l = strlen(st.running[i].context);
-        if (l > w_ctx ) { w_ctx  = l; } l = strlen(st.running[i].expires);
-        if (l > w_exp ) { w_exp  = l; }
+    for (int i = 0, l; i < running_cnt; i++) {
+        l = strlen(running[i].name   ); if (l > w_name) { w_name = l; }
+        l = strlen(running[i].id     ); if (l > w_id  ) { w_id   = l; }
+        l = strlen(running[i].size   ); if (l > w_size) { w_size = l; }
+        l = strlen(running[i].proc   ); if (l > w_proc) { w_proc = l; }
+        l = strlen(running[i].context); if (l > w_ctx ) { w_ctx  = l; }
+        l = strlen(running[i].expires); if (l > w_exp ) { w_exp  = l; }
     }
 
     if (w_name > MAX_COL_WIDTH) { w_name = MAX_COL_WIDTH; }
@@ -443,37 +482,80 @@ static void compute_widths(void) {
     if (w_ctx  > MAX_COL_WIDTH) { w_ctx  = MAX_COL_WIDTH; }
     if (w_exp  > MAX_COL_WIDTH) { w_exp  = MAX_COL_WIDTH; }
 
-    st.rcol_name = w_name + MIN_COL_PAD;
-    st.rcol_id   = w_id   + MIN_COL_PAD;
-    st.rcol_size = w_size + MIN_COL_PAD;
-    st.rcol_proc = w_proc + MIN_COL_PAD;
-    st.rcol_ctx  = w_ctx  + MIN_COL_PAD;
-    st.rcol_exp  = w_exp  + MIN_COL_PAD;
-    // clang-format off
+    *rcol_name = w_name + MIN_COL_PAD;
+    *rcol_id   = w_id   + MIN_COL_PAD;
+    *rcol_size = w_size + MIN_COL_PAD;
+    *rcol_proc = w_proc + MIN_COL_PAD;
+    *rcol_ctx  = w_ctx  + MIN_COL_PAD;
+    *rcol_exp  = w_exp  + MIN_COL_PAD;
+    // clang-format on
 }
 
 // -----------------------------------------------------------------------------
-// Data Refresh (no ncurses calls – thread safe)
+// Data Refresh (no ncurses calls – thread safe with brief lock)
 // -----------------------------------------------------------------------------
 
 /**
  * @brief Refresh model and running data by invoking ollama commands.
  *
- * This function fetches fresh data from `ollama list` and `ollama ps`,
- * updates the internal arrays, and recomputes column widths.
- * It is thread-safe (uses mutex).
+ * This function fetches fresh data into local buffers, then locks the mutex
+ * only to memcpy the results into the global state. This minimizes UI stutter.
  */
 static void refresh_data(void) {
-    char out[MAX_CMD_OUT];
+    char    out[MAX_CMD_OUT];
+    Model   local_models[MAX_MODELS];
+    Running local_running[MAX_MODELS];
+    int     local_model_cnt   = 0;
+    int     local_running_cnt = 0;
+    int     local_col_name;
+    int     local_col_id;
+    int     local_col_size;
+    int     local_col_date;
+    int     local_rcol_name;
+    int     local_rcol_id;
+    int     local_rcol_size;
+    int     local_rcol_proc;
+    int     local_rcol_ctx;
+    int     local_rcol_exp;
 
     run_cmd("ollama list 2>/dev/null", out, sizeof(out));
-    parse_list(out);
+    parse_list_into(out, local_models, &local_model_cnt);
+
+    run_cmd("ollama ps 2>/dev/null", out, sizeof(out));
+    parse_ps_into(out, local_running, &local_running_cnt);
+
+    compute_widths_from(local_models, //
+                        local_model_cnt,
+                        local_running,
+                        local_running_cnt,
+                        &local_col_name,
+                        &local_col_id,
+                        &local_col_size,
+                        &local_col_date,
+                        &local_rcol_name,
+                        &local_rcol_id,
+                        &local_rcol_size,
+                        &local_rcol_proc,
+                        &local_rcol_ctx,
+                        &local_rcol_exp);
 
     pthread_mutex_lock(&st.mutex);
-    run_cmd("ollama ps 2>/dev/null", out, sizeof(out));
-    parse_ps(out);
-
-    compute_widths();
+    // clang-format off
+    memcpy(st.models , local_models , sizeof(Model  ) * local_model_cnt  );
+    memcpy(st.running, local_running, sizeof(Running) * local_running_cnt);
+    // clang-format on
+    st.model_cnt   = local_model_cnt;
+    st.running_cnt = local_running_cnt;
+    st.col_name    = local_col_name;
+    st.col_id      = local_col_id;
+    st.col_size    = local_col_size;
+    st.col_date    = local_col_date;
+    st.rcol_name   = local_rcol_name;
+    st.rcol_id     = local_rcol_id;
+    st.rcol_size   = local_rcol_size;
+    st.rcol_proc   = local_rcol_proc;
+    st.rcol_ctx    = local_rcol_ctx;
+    st.rcol_exp    = local_rcol_exp;
     pthread_mutex_unlock(&st.mutex);
 }
 
@@ -488,20 +570,20 @@ static void refresh_data(void) {
  */
 static void remove_model(const char *name) {
     char cmd[MAX_LINE_LEN];
-    char output[MAX_LOG_LEN - 32];
+    char out[MAX_LOG_LEN - 32];
 
     snprintf(cmd, sizeof(cmd), "ollama rm %s 2>&1", name);
 
-    int ret = run_cmd(cmd, output, sizeof(output));
+    int ret = run_cmd(cmd, out, sizeof(out));
     if (ret == 0) {
         snprintf(st.logmsg, sizeof(st.logmsg), "Removed model: %s", name);
         snprintf(st.status, sizeof(st.status), "Model removed");
     } else {
-        size_t len = strlen(output);
-        if (len > 0 && output[len - 1] == '\n') {
-            output[len - 1] = '\0';
+        size_t len = strlen(out);
+        if (len > 0 && out[len - 1] == '\n') {
+            out[len - 1] = '\0';
         }
-        snprintf(st.logmsg, sizeof(st.logmsg), "Failed to remove %s: %s", name, output);
+        snprintf(st.logmsg, sizeof(st.logmsg), "Failed to remove %s: %s", name, out);
         snprintf(st.status, sizeof(st.status), "Delete failed");
     }
 }
@@ -513,20 +595,20 @@ static void remove_model(const char *name) {
  */
 static void stop_model(const char *name) {
     char cmd[MAX_LINE_LEN];
-    char output[MAX_LOG_LEN - 32];
+    char out[MAX_LOG_LEN - 32];
 
     snprintf(cmd, sizeof(cmd), "ollama stop %s 2>&1", name);
 
-    int ret = run_cmd(cmd, output, sizeof(output));
+    int ret = run_cmd(cmd, out, sizeof(out));
     if (ret == 0) {
         snprintf(st.logmsg, sizeof(st.logmsg), "Stopped model: %s", name);
         snprintf(st.status, sizeof(st.status), "Model stopped");
     } else {
-        size_t len = strlen(output);
-        if (len > 0 && output[len - 1] == '\n') {
-            output[len - 1] = '\0';
+        size_t len = strlen(out);
+        if (len > 0 && out[len - 1] == '\n') {
+            out[len - 1] = '\0';
         }
-        snprintf(st.logmsg, sizeof(st.logmsg), "Failed to stop %s: %s", name, output);
+        snprintf(st.logmsg, sizeof(st.logmsg), "Failed to stop %s: %s", name, out);
         snprintf(st.status, sizeof(st.status), "Stop failed");
     }
 }
@@ -540,6 +622,7 @@ static void show_info(const char *name) {
     char cmd[MAX_LINE_LEN];
 
     snprintf(cmd, sizeof(cmd), "ollama show %s 2>&1", name);
+
     run_cmd(cmd, st.info_out, sizeof(st.info_out));
     st.show_info = 1;
 }
@@ -563,18 +646,18 @@ static void init_ncurses(void) {
         start_color();
         use_default_colors();
         // clang-format off
-        init_pair(CP_DEFAULT      , COLOR_WHITE  , -1        );
-        init_pair(CP_HEADER       , COLOR_WHITE  , COLOR_BLUE);
-        init_pair(CP_ACCENT       , COLOR_CYAN   , -1        );
-        init_pair(CP_SUCCESS      , COLOR_GREEN  , -1        );
-        init_pair(CP_DANGER       , COLOR_RED    , -1        );
-        init_pair(CP_WARNING      , COLOR_YELLOW , -1        );
-        init_pair(CP_RUNNING      , COLOR_GREEN  , -1        );
-        init_pair(CP_SELECTED     , COLOR_BLACK  , COLOR_CYAN);
-        init_pair(CP_BORDER       , COLOR_BLUE   , -1        );
-        init_pair(CP_DIALOG       , COLOR_WHITE  , COLOR_BLUE);
-        init_pair(CP_DIALOG_BORDER, COLOR_CYAN   , COLOR_BLUE);
-        init_pair(CP_INFO_TEXT    , COLOR_YELLOW , COLOR_BLUE);
+        init_pair(CP_DEFAULT      , COLOR_WHITE , -1        );
+        init_pair(CP_HEADER       , COLOR_WHITE , COLOR_BLUE);
+        init_pair(CP_ACCENT       , COLOR_CYAN  , -1        );
+        init_pair(CP_SUCCESS      , COLOR_GREEN , -1        );
+        init_pair(CP_DANGER       , COLOR_RED   , -1        );
+        init_pair(CP_WARNING      , COLOR_YELLOW, -1        );
+        init_pair(CP_RUNNING      , COLOR_GREEN , -1        );
+        init_pair(CP_SELECTED     , COLOR_BLACK , COLOR_CYAN);
+        init_pair(CP_BORDER       , COLOR_BLUE  , -1        );
+        init_pair(CP_DIALOG       , COLOR_WHITE , COLOR_BLUE);
+        init_pair(CP_DIALOG_BORDER, COLOR_CYAN  , COLOR_BLUE);
+        init_pair(CP_INFO_TEXT    , COLOR_YELLOW, COLOR_BLUE);
         // clang-format on
     }
     getmaxyx(stdscr, rows, cols);
@@ -613,10 +696,10 @@ static void draw_dialog_box(int w, //
 
     attron(COLOR_PAIR(CP_DIALOG_BORDER));
     // clang-format off
-    for (int i = 0; i < w; i++) mvaddch(sy        , sx + i    , ACS_HLINE);
-    for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i    , ACS_HLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx        , ACS_VLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx + w - 1, ACS_VLINE);
+    for (int i = 0; i < w; i++) { mvaddch(sy        , sx + i    , ACS_HLINE); }
+    for (int i = 0; i < w; i++) { mvaddch(sy + h - 1, sx + i    , ACS_HLINE); }
+    for (int i = 0; i < h; i++) { mvaddch(sy + i    , sx        , ACS_VLINE); }
+    for (int i = 0; i < h; i++) { mvaddch(sy + i    , sx + w - 1, ACS_VLINE); }
 
     mvaddch(sy        , sx        , ACS_ULCORNER);
     mvaddch(sy        , sx + w - 1, ACS_URCORNER);
@@ -630,31 +713,33 @@ static void draw_dialog_box(int w, //
  * @brief Draw the application header with title and status.
  */
 static void draw_header(void) {
-    attron(COLOR_PAIR(CP_HEADER) | A_BOLD);
+    attron(COLOR_PAIR(CP_HEADER));
+    {
+        attron(A_BOLD);
+        // clang-format off
+        for (int i = 0; i < cols; i++) { mvaddch(0, i, ' '); }
+        for (int i = 0; i < cols; i++) { mvaddch(3, i, ' '); }
+        mvprintw(1, 2, " OLLAMA MODEL MANAGER ");
+        // clang-format on
+        attroff(A_BOLD);
 
-    // clang-format off
-    for (int i = 0; i < cols; i++) { mvaddch(0, i, ' '); }
-    for (int i = 0; i < cols; i++) { mvaddch(3, i, ' '); }
-    // clang-format on
-
-    mvprintw(1, 2, " OLLAMA MODEL MANAGER ");
-    attroff(A_BOLD);
-
-    if (strlen(st.status)) {
-        attron(COLOR_PAIR(CP_SUCCESS));
-        mvprintw(1, cols - strlen(st.status) - 3, " %s ", st.status);
-        attroff(COLOR_PAIR(CP_SUCCESS));
+        if (strlen(st.status)) {
+            attron(COLOR_PAIR(CP_SUCCESS));
+            mvprintw(1, cols - strlen(st.status) - 3, " %s ", st.status);
+            attroff(COLOR_PAIR(CP_SUCCESS));
+        }
     }
-
     attroff(COLOR_PAIR(CP_HEADER));
+
     attron(COLOR_PAIR(CP_BORDER));
+    {
+        // clang-format off
+        for (int i = 0; i < cols; i++) { mvaddch(3, i, ACS_HLINE); }
 
-    // clang-format off
-    for (int i = 0; i < cols; i++) { mvaddch(3, i, ACS_HLINE); }
-
-    mvaddch(3, 0       , ACS_LTEE);
-    mvaddch(3, cols - 1, ACS_RTEE);
-    // clang-format on
+        mvaddch(3, 0       , ACS_LTEE);
+        mvaddch(3, cols - 1, ACS_RTEE);
+        // clang-format on
+    }
     attroff(COLOR_PAIR(CP_BORDER));
 }
 
@@ -674,40 +759,42 @@ static void draw_footer(void) {
     attroff(COLOR_PAIR(CP_BORDER));
 
     attron(COLOR_PAIR(CP_ACCENT));
-    int x = 2;
-    mvprintw(y + 1, x, "[▲/▼] Nav");
-    x += 10;
-    mvprintw(y + 1, x, "  ");
-    x += 2;
-    mvprintw(y + 1, x, "[◀/▶] Tabs");
-    x += 11;
-    mvprintw(y + 1, x, "  ");
-    x += 2;
-    mvprintw(y + 1, x, "[I] Info");
-    x += 9;
-    mvprintw(y + 1, x, "  ");
-    x += 2;
-    mvprintw(y + 1, x, "[D] Delete");
-    x += 11;
-    mvprintw(y + 1, x, "  ");
-    x += 2;
-    mvprintw(y + 1, x, "[S] Stop");
-    x += 9;
-    mvprintw(y + 1, x, "  ");
-    x += 2;
-    mvprintw(y + 1, x, "[P] Pull");
-    x += 9;
-    mvprintw(y + 1, x, "  ");
-    x += 2;
-    mvprintw(y + 1, x, "[R] Refresh");
-    x += 12;
-    mvprintw(y + 1, x, "  ");
-    x += 2;
-    mvprintw(y + 1, x, "[/] Search");
-    x += 11;
-    mvprintw(y + 1, x, "  ");
-    x += 2;
-    mvprintw(y + 1, x, "[Q] Quit");
+    {
+        int x = 2;
+        mvprintw(y + 1, x, "[▲/▼] Nav");
+        x += 10;
+        mvprintw(y + 1, x, "  ");
+        x += 2;
+        mvprintw(y + 1, x, "[◀/▶] Tabs");
+        x += 11;
+        mvprintw(y + 1, x, "  ");
+        x += 2;
+        mvprintw(y + 1, x, "[I] Info");
+        x += 9;
+        mvprintw(y + 1, x, "  ");
+        x += 2;
+        mvprintw(y + 1, x, "[D] Delete");
+        x += 11;
+        mvprintw(y + 1, x, "  ");
+        x += 2;
+        mvprintw(y + 1, x, "[S] Stop");
+        x += 9;
+        mvprintw(y + 1, x, "  ");
+        x += 2;
+        mvprintw(y + 1, x, "[P] Pull");
+        x += 9;
+        mvprintw(y + 1, x, "  ");
+        x += 2;
+        mvprintw(y + 1, x, "[R] Refresh");
+        x += 12;
+        mvprintw(y + 1, x, "  ");
+        x += 2;
+        mvprintw(y + 1, x, "[/] Search");
+        x += 11;
+        mvprintw(y + 1, x, "  ");
+        x += 2;
+        mvprintw(y + 1, x, "[Q] Quit");
+    }
     attroff(COLOR_PAIR(CP_ACCENT));
 
     if (st.pulling) {
@@ -907,7 +994,7 @@ static void draw_running_list(void) {
         mvprintw(row, x_proc, "%-*.*s", st.rcol_proc - 1, st.rcol_proc - 1, st.running[i].proc   );
         mvprintw(row, x_ctx , "%-*.*s", st.rcol_ctx  - 1, st.rcol_ctx  - 1, st.running[i].context);
         mvprintw(row, x_exp , "%-*.*s", st.rcol_exp  - 1, st.rcol_exp  - 1, st.running[i].expires);
-        // clang-format on
+        // clang-format on 
         attroff(COLOR_PAIR(CP_SELECTED) | COLOR_PAIR(CP_DEFAULT));
         row++;
     }
@@ -929,10 +1016,8 @@ static void draw_log(void) {
     for (int i = 0; i < cols; i++) {
         mvaddch(y, i, ACS_HLINE);
     }
-    // clang-format off
-    mvaddch(y, 0       , ACS_LTEE);
+    mvaddch(y, 0, ACS_LTEE);
     mvaddch(y, cols - 1, ACS_RTEE);
-    // clang-format on
     attroff(COLOR_PAIR(CP_BORDER));
 
     attron(COLOR_PAIR(CP_ACCENT));
@@ -984,10 +1069,10 @@ static void draw_info_dialog(void) {
 
     attron(COLOR_PAIR(CP_DIALOG_BORDER));
     // clang-format off
-    for (int i = 0; i < w; i++) mvaddch(sy        , sx + i    , ACS_HLINE);
-    for (int i = 0; i < w; i++) mvaddch(sy + h - 1, sx + i    , ACS_HLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx        , ACS_VLINE);
-    for (int i = 0; i < h; i++) mvaddch(sy + i    , sx + w - 1, ACS_VLINE);
+    for (int i = 0; i < w; i++) { mvaddch(sy        , sx + i    , ACS_HLINE); }
+    for (int i = 0; i < w; i++) { mvaddch(sy + h - 1, sx + i    , ACS_HLINE); }
+    for (int i = 0; i < h; i++) { mvaddch(sy + i    , sx        , ACS_VLINE); }
+    for (int i = 0; i < h; i++) { mvaddch(sy + i    , sx + w - 1, ACS_VLINE); }
 
     mvaddch(sy        , sx        , ACS_ULCORNER);
     mvaddch(sy        , sx + w - 1, ACS_URCORNER);
@@ -1509,7 +1594,7 @@ static void handle_main_keys(int ch) {
 
         case KEY_RESIZE:
             getmaxyx(stdscr, rows, cols);
-            compute_widths();
+            // No need to recompute widths here – next refresh will do it.
             full_refresh();
             break;
 
