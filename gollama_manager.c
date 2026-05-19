@@ -211,9 +211,9 @@ static void parse_list(const char *out) {
             }
         }
         if (date_start > 2 && date_start <= n) {
-            /* Size = two tokens before the date */
+            /* Size = tokens at index 2 and 3 (after `name` and `id`) */
             char size_buf[MAX_SIZE_LEN] = "";
-            snprintf(size_buf, sizeof(size_buf), "%s %s", tok[date_start - 2], tok[date_start - 1]);
+            snprintf(size_buf, sizeof(size_buf), "%s %s", tok[2], tok[3]);
             snprintf(st.models[cnt].size, MAX_SIZE_LEN, "%s", size_buf);
             /* Date = remaining tokens */
             char date_buf[MAX_DATE_LEN] = "";
