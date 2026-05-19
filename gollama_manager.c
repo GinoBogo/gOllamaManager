@@ -27,9 +27,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-/* -----------------------------------------------------------------------------
- * Constants
- * -------------------------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Constants
+// -----------------------------------------------------------------------------
+
 #define MAX_MODELS      256
 #define MAX_NAME_LEN    128
 #define MAX_ID_LEN      64
@@ -43,9 +44,10 @@
 #define MAX_COL_WIDTH   40
 #define MAX_CMD_OUT     32768
 
-/* -----------------------------------------------------------------------------
- * ncurses Color Pairs
- * -------------------------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// ncurses Color Pairs
+// -----------------------------------------------------------------------------
+
 enum {
     CP_DEFAULT = 1,
     CP_HEADER,
@@ -61,9 +63,10 @@ enum {
     CP_INFO_TEXT
 };
 
-/* -----------------------------------------------------------------------------
- * Data Structures
- * -------------------------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Data Structures
+// -----------------------------------------------------------------------------
+
 /**
  * @brief Represents an installed model.
  */
@@ -122,9 +125,10 @@ static struct {
 
 static int rows, cols; /**< Current terminal dimensions */
 
-/* -----------------------------------------------------------------------------
- * Helper Functions
- * -------------------------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Helper Functions
+// -----------------------------------------------------------------------------
+
 /**
  * @brief Run a shell command and capture its standard output.
  *
@@ -133,7 +137,9 @@ static int rows, cols; /**< Current terminal dimensions */
  * @param[in] sz Size of the output buffer (ignored if out is NULL).
  * @return Exit status of the command, or -1 if popen() fails.
  */
-static int run_cmd(const char *cmd, char *out, size_t sz) {
+static int run_cmd(const char *cmd, //
+                   char       *out,
+                   size_t      sz) {
     FILE *fp = popen(cmd, "r");
     if (!fp) {
         if (out)
@@ -159,9 +165,10 @@ static int run_cmd(const char *cmd, char *out, size_t sz) {
     return -1;
 }
 
-/* -----------------------------------------------------------------------------
- * Parsing: `ollama list` and `ollama ps` (plain text)
- * -------------------------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Parsing: `ollama list` and `ollama ps` (plain text)
+// -----------------------------------------------------------------------------
+
 /**
  * @brief Parse the output of `ollama list` and populate the models array.
  *
@@ -377,9 +384,10 @@ static void parse_ps(const char *out) {
     st.running_cnt = cnt;
 }
 
-/* -----------------------------------------------------------------------------
- * Dynamic Column Width Calculation
- * -------------------------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Dynamic Column Width Calculation
+// -----------------------------------------------------------------------------
+
 /**
  * @brief Compute optimal column widths for both tabs based on current data.
  *
@@ -444,9 +452,10 @@ static void compute_widths(void) {
     // clang-format off
 }
 
-/* -----------------------------------------------------------------------------
- * Data Refresh (no ncurses calls – thread safe)
- * -------------------------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Data Refresh (no ncurses calls – thread safe)
+// -----------------------------------------------------------------------------
+
 /**
  * @brief Refresh model and running data by invoking ollama commands.
  *
@@ -468,30 +477,31 @@ static void refresh_data(void) {
     pthread_mutex_unlock(&st.mutex);
 }
 
-/* -----------------------------------------------------------------------------
- * Model Operations (Delete, Stop, Show Info)
- * -------------------------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Model Operations (Delete, Stop, Show Info)
+// -----------------------------------------------------------------------------
+
 /**
  * @brief Remove a model from the Ollama server.
  *
- * @param[in] llm_name The name of the model to remove.
+ * @param[in] name The name of the model to remove.
  */
-static void remove_model(const char *llm_name) {
+static void remove_model(const char *name) {
     char cmd[MAX_LINE_LEN];
     char output[MAX_LOG_LEN - 32];
 
-    snprintf(cmd, sizeof(cmd), "ollama rm %s 2>&1", llm_name);
+    snprintf(cmd, sizeof(cmd), "ollama rm %s 2>&1", name);
 
     int ret = run_cmd(cmd, output, sizeof(output));
     if (ret == 0) {
-        snprintf(st.logmsg, sizeof(st.logmsg), "Removed model: %s", llm_name);
+        snprintf(st.logmsg, sizeof(st.logmsg), "Removed model: %s", name);
         snprintf(st.status, sizeof(st.status), "Model removed");
     } else {
         size_t len = strlen(output);
         if (len > 0 && output[len - 1] == '\n') {
             output[len - 1] = '\0';
         }
-        snprintf(st.logmsg, sizeof(st.logmsg), "Failed to remove %s: %s", llm_name, output);
+        snprintf(st.logmsg, sizeof(st.logmsg), "Failed to remove %s: %s", name, output);
         snprintf(st.status, sizeof(st.status), "Delete failed");
     }
 }
@@ -499,24 +509,24 @@ static void remove_model(const char *llm_name) {
 /**
  * @brief Stop a running model.
  *
- * @param[in] llm_name The name of the running model to stop.
+ * @param[in] name The name of the running model to stop.
  */
-static void stop_model(const char *llm_name) {
+static void stop_model(const char *name) {
     char cmd[MAX_LINE_LEN];
     char output[MAX_LOG_LEN - 32];
 
-    snprintf(cmd, sizeof(cmd), "ollama stop %s 2>&1", llm_name);
+    snprintf(cmd, sizeof(cmd), "ollama stop %s 2>&1", name);
 
     int ret = run_cmd(cmd, output, sizeof(output));
     if (ret == 0) {
-        snprintf(st.logmsg, sizeof(st.logmsg), "Stopped model: %s", llm_name);
+        snprintf(st.logmsg, sizeof(st.logmsg), "Stopped model: %s", name);
         snprintf(st.status, sizeof(st.status), "Model stopped");
     } else {
         size_t len = strlen(output);
         if (len > 0 && output[len - 1] == '\n') {
             output[len - 1] = '\0';
         }
-        snprintf(st.logmsg, sizeof(st.logmsg), "Failed to stop %s: %s", llm_name, output);
+        snprintf(st.logmsg, sizeof(st.logmsg), "Failed to stop %s: %s", name, output);
         snprintf(st.status, sizeof(st.status), "Stop failed");
     }
 }
@@ -524,19 +534,20 @@ static void stop_model(const char *llm_name) {
 /**
  * @brief Retrieve detailed information about a model and show the info dialog.
  *
- * @param[in] llm_name The name of the model to inspect.
+ * @param[in] name The name of the model to inspect.
  */
-static void show_info(const char *llm_name) {
+static void show_info(const char *name) {
     char cmd[MAX_LINE_LEN];
 
-    snprintf(cmd, sizeof(cmd), "ollama show %s 2>&1", llm_name);
+    snprintf(cmd, sizeof(cmd), "ollama show %s 2>&1", name);
     run_cmd(cmd, st.info_out, sizeof(st.info_out));
     st.show_info = 1;
 }
 
-/* -----------------------------------------------------------------------------
- * ncurses Initialization & Cleanup
- * -------------------------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// ncurses Initialization & Cleanup
+// -----------------------------------------------------------------------------
+
 /**
  * @brief Initialize ncurses environment and color pairs.
  */
@@ -576,9 +587,10 @@ static inline void cleanup(void) {
     endwin();
 }
 
-/* -----------------------------------------------------------------------------
- * UI Drawing – Header, Footer, Tabs, Lists, Log, Dialogs
- * -------------------------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// UI Drawing – Header, Footer, Tabs, Lists, Log, Dialogs
+// -----------------------------------------------------------------------------
+
 /**
  * @brief Draw a dialog box with background and border.
  *
@@ -587,7 +599,10 @@ static inline void cleanup(void) {
  * @param[in] sy Starting Y position (row).
  * @param[in] sx Starting X position (column).
  */
-static void draw_dialog_box(int w, int h, int sy, int sx) {
+static void draw_dialog_box(int w, //
+                            int h,
+                            int sy,
+                            int sx) {
     attron(COLOR_PAIR(CP_DIALOG));
     for (int i = 0; i < h; i++) {
         for (int j = 0; j < w; j++) {
@@ -878,19 +893,21 @@ static void draw_running_list(void) {
 
     pthread_mutex_lock(&st.mutex);
     int row = ylist;
+
     for (int i = 0; i < st.running_cnt && row < rows - 9; i++) {
-        if (i == st.sel_running && st.tab == 1)
+        if (i == st.sel_running && st.tab == 1) {
             attron(COLOR_PAIR(CP_SELECTED));
-        else
+        } else {
             attron(COLOR_PAIR(CP_DEFAULT));
-
-        mvprintw(row, x_name, "%-*.*s", st.rcol_name - 1, st.rcol_name - 1, st.running[i].name);
-        mvprintw(row, x_id, "%-*.*s", st.rcol_id - 1, st.rcol_id - 1, st.running[i].id);
-        mvprintw(row, x_size, "%-*.*s", st.rcol_size - 1, st.rcol_size - 1, st.running[i].size);
-        mvprintw(row, x_proc, "%-*.*s", st.rcol_proc - 1, st.rcol_proc - 1, st.running[i].proc);
-        mvprintw(row, x_ctx, "%-*.*s", st.rcol_ctx - 1, st.rcol_ctx - 1, st.running[i].context);
-        mvprintw(row, x_exp, "%-*.*s", st.rcol_exp - 1, st.rcol_exp - 1, st.running[i].expires);
-
+        }
+        // clang-format off
+        mvprintw(row, x_name, "%-*.*s", st.rcol_name - 1, st.rcol_name - 1, st.running[i].name   );
+        mvprintw(row, x_id  , "%-*.*s", st.rcol_id   - 1, st.rcol_id   - 1, st.running[i].id     );
+        mvprintw(row, x_size, "%-*.*s", st.rcol_size - 1, st.rcol_size - 1, st.running[i].size   );
+        mvprintw(row, x_proc, "%-*.*s", st.rcol_proc - 1, st.rcol_proc - 1, st.running[i].proc   );
+        mvprintw(row, x_ctx , "%-*.*s", st.rcol_ctx  - 1, st.rcol_ctx  - 1, st.running[i].context);
+        mvprintw(row, x_exp , "%-*.*s", st.rcol_exp  - 1, st.rcol_exp  - 1, st.running[i].expires);
+        // clang-format on
         attroff(COLOR_PAIR(CP_SELECTED) | COLOR_PAIR(CP_DEFAULT));
         row++;
     }
@@ -907,14 +924,21 @@ static void draw_running_list(void) {
  */
 static void draw_log(void) {
     int y = rows - 3;
+
     attron(COLOR_PAIR(CP_BORDER));
-    for (int i = 0; i < cols; i++) mvaddch(y, i, ACS_HLINE);
-    mvaddch(y, 0, ACS_LTEE);
+    for (int i = 0; i < cols; i++) {
+        mvaddch(y, i, ACS_HLINE);
+    }
+    // clang-format off
+    mvaddch(y, 0       , ACS_LTEE);
     mvaddch(y, cols - 1, ACS_RTEE);
+    // clang-format on
     attroff(COLOR_PAIR(CP_BORDER));
+
     attron(COLOR_PAIR(CP_ACCENT));
     mvprintw(y + 1, 2, "LOG:");
     attroff(COLOR_PAIR(CP_ACCENT));
+
     attron(COLOR_PAIR(CP_DEFAULT));
     mvprintw(y + 1, 7, "%-*s", cols - 10, st.logmsg);
     attroff(COLOR_PAIR(CP_DEFAULT));
@@ -926,10 +950,12 @@ static void draw_log(void) {
 static void draw_content(void) {
     draw_tabs();
     draw_search();
-    if (st.tab == 0)
+
+    if (st.tab == 0) {
         draw_model_list();
-    else
+    } else {
         draw_running_list();
+    }
 }
 
 /**
@@ -977,6 +1003,7 @@ static void draw_info_dialog(void) {
     attron(COLOR_PAIR(CP_INFO_TEXT) | A_BOLD);
     int   row  = sy + 3;
     char *line = strtok(st.info_out, "\n");
+
     while (line && row < sy + h - 2) {
         char disp[w - 4];
         snprintf(disp, sizeof(disp), "%s", line);
@@ -1001,7 +1028,8 @@ static void draw_info_dialog(void) {
  * @param[in] title Null-terminated title string (including surrounding spaces).
  * @param[in] hint  Null-terminated footer hint string.
  */
-static void draw_input_dialog(const char *title, const char *hint) {
+static void draw_input_dialog(const char *title, //
+                              const char *hint) {
     int w  = 64;
     int h  = 6;
     int sy = (rows - h) / 2;
@@ -1058,9 +1086,10 @@ static void draw_search_dialog(void) {
     draw_input_dialog(" SEARCH MODEL ", " Press ENTER to search, ESC to cancel ");
 }
 
-/* -----------------------------------------------------------------------------
- * Confirmation Dialog (OK / Cancel)
- * -------------------------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Confirmation Dialog (OK / Cancel)
+// -----------------------------------------------------------------------------
+
 /**
  * @brief Draw a confirmation dialog with OK and Cancel buttons.
  */
@@ -1123,9 +1152,10 @@ static void log_msg(const char *fmt, ...) {
     refresh();
 }
 
-/* -----------------------------------------------------------------------------
- * Background Refresh Thread
- * -------------------------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Background Refresh Thread
+// -----------------------------------------------------------------------------
+
 /**
  * @brief Background thread function to refresh data without blocking the UI.
  *
@@ -1139,9 +1169,10 @@ static void *refresh_thread(void *arg) {
     return NULL;
 }
 
-/* -----------------------------------------------------------------------------
- * Helper Functions for Main Event Loop
- * -------------------------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Helper Functions for Main Event Loop
+// -----------------------------------------------------------------------------
+
 /**
  * @brief Execute the ollama pull command for a model.
  *
@@ -1149,6 +1180,7 @@ static void *refresh_thread(void *arg) {
  */
 static void execute_pull_model(const char *model_name) {
     char cmd[MAX_LINE_LEN];
+
     snprintf(cmd, sizeof(cmd), "ollama pull %s", model_name);
     printf("\n");
     printf("┌─────────────────────────────────────────────────────────────────────┐\n");
@@ -1182,19 +1214,21 @@ static void execute_pull_model(const char *model_name) {
 /**
  * @brief Shared key-handler core for text-input dialogs.
  *
- * Processes one keystroke for any dialog that uses @c st.dialog_input.
- * The caller supplies two callbacks:
- *  - @p draw_fn   redraws the dialog (called after BACKSPACE / printable key).
- *  - @p enter_fn  called when ENTER is pressed with a non-empty input buffer;
- *                 responsible for consuming the input and closing the dialog.
- * ESC always clears the buffer and triggers a full_refresh().
+ * Processes one keystroke for any dialog that uses @c st.dialog_input. The
+ * caller supplies two callbacks:
+ *  - @p draw_fn redraws the dialog (called after BACKSPACE / printable key).
+ *  - @p enter_fn called when ENTER is pressed with a non-empty input buffer;
+ *    responsible for consuming the input and closing the dialog. ESC always
+ *    clears the buffer and triggers a full_refresh().
  *
  * @param[in] active_flag Pointer to the st flag that keeps this dialog open
- *                        (set to 0 on ESC so the caller's loop exits cleanly).
- * @param[in] draw_fn     Function that redraws the dialog.
- * @param[in] enter_fn    Function that handles a confirmed (ENTER) submission.
+ * (set to 0 on ESC so the caller's loop exits cleanly).
+ * @param[in] draw_fn Function that redraws the dialog.
+ * @param[in] enter_fn Function that handles a confirmed (ENTER) submission.
  */
-static void handle_input_dialog_keys(int *active_flag, void (*draw_fn)(void), void (*enter_fn)(void)) {
+static void handle_input_dialog_keys(int *active_flag, //
+                                     void (*draw_fn)(void),
+                                     void (*enter_fn)(void)) {
     int ch = getch();
     if (ch == 27) { // ESCAPE
         *active_flag = 0;
@@ -1220,7 +1254,9 @@ static void handle_input_dialog_keys(int *active_flag, void (*draw_fn)(void), vo
     }
 }
 
-/* -- pull dialog enter callback ------------------------------------------ */
+/**
+ * @brief Handle the Enter key press in the pull dialog.
+ */
 static void pull_dialog_enter(void) {
     if (strlen(st.dialog_input)) {
         st.pulling     = 1;
@@ -1240,7 +1276,9 @@ static void handle_pull_dialog_keys(void) {
     handle_input_dialog_keys(&st.show_dialog, draw_pull_dialog, pull_dialog_enter);
 }
 
-/* -- search dialog enter callback ---------------------------------------- */
+/**
+ * @brief Handle the Enter key press in the search dialog.
+ */
 static void search_dialog_enter(void) {
     if (strlen(st.dialog_input)) {
         snprintf(st.filter, MAX_NAME_LEN, "%s", st.dialog_input);
@@ -1507,12 +1545,10 @@ static int initialize_app(void) {
     return 0;
 }
 
-/* -----------------------------------------------------------------------------
- * Main Program
- * -------------------------------------------------------------------------- */
-/**
- * @brief Entry point of the Ollama Model Manager.
- */
+// -----------------------------------------------------------------------------
+// Entry point of the Ollama Model Manager
+// -----------------------------------------------------------------------------
+
 int main(void) {
     if (initialize_app() != 0) {
         return 1;
