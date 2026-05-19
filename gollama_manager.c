@@ -133,6 +133,16 @@ static int cols;
 // -----------------------------------------------------------------------------
 
 /**
+ * @brief Clear the terminal screen using ANSI escape codes.
+ *
+ * Sends the clear-screen and home-cursor sequence to stdout.
+ */
+static void clear_term(void) {
+    printf("\033[2J\033[H");
+    fflush(stdout);
+}
+
+/**
  * @brief Case‑insensitive substring search (portable replacement for
  * strcasestr).
  *
@@ -1372,6 +1382,7 @@ static void pull_dialog_enter(void) {
 
         def_prog_mode();
         endwin();
+        clear_term();
         execute_pull_model(st.dialog_input);
     }
 }
@@ -1501,6 +1512,7 @@ static void handle_main_keys(int ch) {
         case 'q':
         case 'Q':
             cleanup();
+            clear_term();
             pthread_mutex_destroy(&st.mutex);
             printf("\nGoodbye.\n");
             exit(0);
