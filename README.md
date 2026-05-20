@@ -31,7 +31,7 @@ A terminal-based user interface (TUI) for managing Ollama models. Built with C a
 - Linux operating system
 - GCC compiler
 - CMake (3.10 or higher)
-- ncurses library
+- ncursesw library (wide-character version)
 - pthread library
 - Ollama installed and available in PATH
 
@@ -105,6 +105,9 @@ gollama_manager
 - **ESC** - Cancel dialog
 - **TAB** - Toggle between OK/Cancel in confirmation dialogs
 - **LEFT/RIGHT** - Navigate between OK/Cancel in confirmation dialogs
+- **HOME/END** - Jump to start/end of input field
+- **DELETE** - Delete character at cursor position
+- **INSERT** - Toggle insert/overwrite mode
 
 ## Building from Source
 
@@ -135,7 +138,7 @@ gollama_manager
 ## Technical Details
 
 - **Language**: C
-- **UI Framework**: ncurses
+- **UI Framework**: ncursesw
 - **Threading**: pthread
 - **Build System**: CMake
 - **Compiler**: GCC with strict warnings enabled
@@ -160,14 +163,14 @@ Ensure Ollama is installed and available in your PATH:
 ollama --version
 ```
 
-### ncurses not found
-Install ncurses development library:
+### ncursesw not found
+Install ncursesw development library (wide-character version for UTF-8 support):
 ```bash
 # Arch Linux
-sudo pacman -S ncurses
+sudo pacman -S ncursesw
 
 # Ubuntu/Debian
-sudo apt-get install libncurses-dev
+sudo apt-get install libncursesw5-dev
 
 # Fedora/RHEL
 sudo dnf install ncurses-devel

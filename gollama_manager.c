@@ -179,6 +179,146 @@ static char *str_case_str(const char *haystack, //
     return NULL;
 }
 
+// -----------------------------------------------------------------------------
+// Unicode Sanitizer for Fullwidth Characters (Info Dialog)
+// -----------------------------------------------------------------------------
+
+/**
+ * @brief Convert a fullwidth character (U+FF00–U+FFEF) to its halfwidth ASCII equivalent.
+ * @param cp Unicode codepoint.
+ * @return Converted codepoint, or original if not in fullwidth range.
+ */
+static uint32_t fullwidth_to_halfwidth(uint32_t cp) {
+    // Fullwidth ! " # $ % & ' ( ) * + , - . / 0-9 : ; < = > ? @ A-Z [ \ ] ^ _ ` a-z { | } ~
+    if (cp >= 0xFF01 && cp <= 0xFF5E) {
+        return cp - 0xFF01 + 0x21;
+    }
+    // Specific override for U+FF5C (fullwidth vertical bar) – ensure it becomes '|'
+    if (cp == 0xFF5C) {
+        return '|';
+    }
+    // Fullwidth cent, pound, etc. (optional)
+    if (cp == 0xFFE0)
+        return 0xA2; // cent
+    if (cp == 0xFFE1)
+        return 0xA3; // pound
+    if (cp == 0xFFE5)
+        return 0xA5; // yen
+    // Everything else stays as is
+    return cp;
+}
+
+/**
+ * @brief Decode one UTF-8 character and return its Unicode codepoint.
+ *
+ * @param s Pointer to UTF-8 string.
+ * @param len Number of bytes consumed (output).
+ * @return Unicode codepoint, or 0xFFFD on error.
+ */
+static uint32_t utf8_decode(const char *s, int *len) {
+    unsigned char c = (unsigned char)s[0];
+
+    if (c < 0x80) {
+        *len = 1;
+        return c;
+    }
+
+    if ((c & 0xE0) == 0xC0 && //
+        (s[1] & 0xC0) == 0x80) {
+        *len = 2;
+        return ((c & 0x1F) << 6) | (s[1] & 0x3F);
+    }
+
+    if ((c & 0xF0) == 0xE0 &&    //
+        (s[1] & 0xC0) == 0x80 && //
+        (s[2] & 0xC0) == 0x80) {
+        *len = 3;
+        return ((c & 0x0F) << 12) | ((s[1] & 0x3F) << 6) | (s[2] & 0x3F);
+    }
+
+    if ((c & 0xF8) == 0xF0 &&    //
+        (s[1] & 0xC0) == 0x80 && //
+        (s[2] & 0xC0) == 0x80 && //
+        (s[3] & 0xC0) == 0x80) {
+        *len = 4;
+        return ((c & 0x07) << 18) | ((s[1] & 0x3F) << 12) | ((s[2] & 0x3F) << 6) | (s[3] & 0x3F);
+    }
+
+    *len = 1;
+    return 0xFFFD; // replacement character
+}
+
+/**
+ * @brief Encode a Unicode codepoint as UTF-8.
+ *
+ * @param cp Codepoint.
+ * @param buf Output buffer (at least 4 bytes).
+ * @return Number of bytes written.
+ */
+static int utf8_encode(uint32_t cp, char *buf) {
+    if (cp < 0x80) {
+        buf[0] = (char)cp;
+        return 1;
+    }
+
+    if (cp < 0x800) {
+        buf[0] = (char)(0xC0 | (cp >> 6));
+        buf[1] = (char)(0x80 | (cp & 0x3F));
+        return 2;
+    }
+
+    if (cp < 0x10000) {
+        buf[0] = (char)(0xE0 | (cp >> 12));
+        buf[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        buf[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    }
+
+    buf[0] = (char)(0xF0 | (cp >> 18));
+    buf[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    buf[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    buf[3] = (char)(0x80 | (cp & 0x3F));
+    return 4;
+}
+
+/**
+ * @brief Sanitize a UTF-8 string: convert fullwidth characters to halfwidth.
+ * @param dst Output buffer.
+ * @param src Input string.
+ * @param dst_size Size of output buffer.
+ */
+static void sanitize_fullwidth(char *dst, const char *src, size_t dst_size) {
+    size_t di = 0;
+
+    while (*src && di < dst_size - 4) { // room for worst-case 4 bytes
+        int len;
+
+        uint32_t cp = utf8_decode(src, &len);
+        if (cp == 0xFFFD) {
+            // invalid sequence: copy raw byte as '?'
+            dst[di++] = '?';
+            src++;
+            continue;
+        }
+
+        uint32_t converted = fullwidth_to_halfwidth(cp);
+        if (converted != cp) {
+            char buf[4];
+            int  n = utf8_encode(converted, buf);
+            for (int i = 0; i < n && di < dst_size - 1; i++) {
+                dst[di++] = buf[i];
+            }
+        } else {
+            // keep original UTF-8 bytes
+            for (int i = 0; i < len && di < dst_size - 1; i++) {
+                dst[di++] = src[i];
+            }
+        }
+        src += len;
+    }
+    dst[di] = '\0';
+}
+
 /**
  * @brief Change current working directory to root ("/")
  *
@@ -1070,18 +1210,19 @@ static void draw_content(void) {
 
 /**
  * @brief Draw the model information dialog.
+ *
+ * This function now sanitizes each line to replace fullwidth characters
+ * (e.g., U+FF5C '｜') with their ASCII equivalents.
  */
 static void draw_info_dialog(void) {
     int w = (cols - 4 < 90) ? cols - 4 : 90;
     if (w < 40)
         w = 40;
-
     int h = rows - 10;
     if (h > 30)
         h = 30;
     if (h < 10)
         h = 10;
-
     int sy = (rows - h) / 2;
     int sx = (cols - w) / 2;
 
@@ -1090,11 +1231,12 @@ static void draw_info_dialog(void) {
     attron(COLOR_PAIR(CP_INFO_TEXT) | A_BOLD);
     int   row  = sy + 2;
     char *line = strtok(st.info_out, "\n");
-
     while (line && row < sy + h - 2) {
         char disp[w - 4];
+        char sanitized[w - 4];
         snprintf(disp, sizeof(disp), "%s", line);
-        mvprintw(row, sx + 2, "%s", disp);
+        sanitize_fullwidth(sanitized, disp, sizeof(sanitized));
+        mvprintw(row, sx + 2, "%s", sanitized);
         row++;
         line = strtok(NULL, "\n");
     }
