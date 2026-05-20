@@ -1215,14 +1215,16 @@ static void draw_content(void) {
  * (e.g., U+FF5C '｜') with their ASCII equivalents.
  */
 static void draw_info_dialog(void) {
-    int w = (cols - 4 < 90) ? cols - 4 : 90;
-    if (w < 40)
-        w = 40;
+    int w = cols - 4;
     int h = rows - 10;
-    if (h > 30)
-        h = 30;
-    if (h < 10)
-        h = 10;
+
+    // clang-format off
+    if (w > 90) { w = 90; }
+    if (w < 40) { w = 40; }
+    if (h > 30) { h = 30; }
+    if (h < 10) { h = 10; }
+    // clang-format on
+
     int sy = (rows - h) / 2;
     int sx = (cols - w) / 2;
 
