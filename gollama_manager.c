@@ -1019,7 +1019,7 @@ static void draw_running_list(void) {
         mvprintw(row, x_proc, "%-*.*s", st.rcol_proc - 1, st.rcol_proc - 1, st.running[i].proc   );
         mvprintw(row, x_ctx , "%-*.*s", st.rcol_ctx  - 1, st.rcol_ctx  - 1, st.running[i].context);
         mvprintw(row, x_exp , "%-*.*s", st.rcol_exp  - 1, st.rcol_exp  - 1, st.running[i].expires);
-        // clang-format on 
+        // clang-format on
         attroff(COLOR_PAIR(CP_SELECTED) | COLOR_PAIR(CP_DEFAULT));
         row++;
     }
@@ -1082,36 +1082,13 @@ static void draw_info_dialog(void) {
     if (h < 10)
         h = 10;
 
-    int sy = (rows - h) / 2, sx = (cols - w) / 2;
+    int sy = (rows - h) / 2;
+    int sx = (cols - w) / 2;
 
-    attron(COLOR_PAIR(CP_DIALOG));
-    for (int i = 0; i < h; i++) {
-        for (int j = 0; j < w; j++) {
-            mvaddch(sy + i, sx + j, ' ');
-        }
-    }
-    attroff(COLOR_PAIR(CP_DIALOG));
-
-    attron(COLOR_PAIR(CP_DIALOG_BORDER));
-    // clang-format off
-    for (int i = 0; i < w; i++) { mvaddch(sy        , sx + i    , ACS_HLINE); }
-    for (int i = 0; i < w; i++) { mvaddch(sy + h - 1, sx + i    , ACS_HLINE); }
-    for (int i = 0; i < h; i++) { mvaddch(sy + i    , sx        , ACS_VLINE); }
-    for (int i = 0; i < h; i++) { mvaddch(sy + i    , sx + w - 1, ACS_VLINE); }
-
-    mvaddch(sy        , sx        , ACS_ULCORNER);
-    mvaddch(sy        , sx + w - 1, ACS_URCORNER);
-    mvaddch(sy + h - 1, sx        , ACS_LLCORNER);
-    mvaddch(sy + h - 1, sx + w - 1, ACS_LRCORNER);
-    // clang-format on
-    attroff(COLOR_PAIR(CP_DIALOG_BORDER));
-
-    attron(COLOR_PAIR(CP_HEADER) | A_BOLD);
-    mvprintw(sy + 1, sx + (w - 20) / 2, " MODEL INFORMATION ");
-    attroff(A_BOLD | COLOR_PAIR(CP_HEADER));
+    draw_dialog_box(w, h, sy, sx, "MODEL INFORMATION");
 
     attron(COLOR_PAIR(CP_INFO_TEXT) | A_BOLD);
-    int   row  = sy + 3;
+    int   row  = sy + 2;
     char *line = strtok(st.info_out, "\n");
 
     while (line && row < sy + h - 2) {
