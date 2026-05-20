@@ -17,15 +17,18 @@
 */
 /* ************************************************************************** */
 
-#include <ctype.h>   // isprint, tolower
-#include <locale.h>  // LC_ALL, setlocale
-#include <ncurses.h> // ACS_HLINE, ACS_LLCORNER, ACS_LRCORNER, ACS_LTEE, ACS_RTEE ...
-#include <pthread.h> // pthread_create, pthread_detach, pthread_mutex_destroy, ...
-#include <stdarg.h>  // va_list, va_start, va_end
-#include <stdio.h>   // FILE, fflush, fgets, fprintf, getchar, ...
-#include <stdlib.h>  // WEXITSTATUS, WIFEXITED, exit, system
-#include <string.h>  // memcpy, memset, strcmp, strlen, strtok, ...
-#include <unistd.h>  // NULL, chdir, getcwd
+#define _XOPEN_SOURCE 600 // POSIX.1-2001 (or use 700 for newer)
+#include <ctype.h>        // isprint, tolower
+#include <locale.h>       // LC_ALL, setlocale
+#include <ncurses.h>      // ACS_HLINE, ACS_LLCORNER, ACS_LRCORNER, ACS_LTEE, ACS_RTEE ...
+#include <pthread.h>      // pthread_create, pthread_detach, pthread_mutex_destroy, ...
+#include <stdarg.h>       // va_list, va_start, va_end
+#include <stdbool.h>      // bool, false, true
+#include <stdio.h>        // FILE, fflush, fgets, fprintf, getchar, ...
+#include <stdlib.h>       // WEXITSTATUS, WIFEXITED, exit, system
+#include <string.h>       // memcpy, memset, strcmp, strlen, strtok, ...
+#include <unistd.h>       // NULL, chdir, getcwd
+#include <wchar.h>        // wchar_t, wcswidth
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -43,23 +46,6 @@
 #define MIN_COL_PAD     2
 #define MAX_COL_WIDTH   40
 #define MAX_CMD_OUT     32768
-
-// -----------------------------------------------------------------------------
-// Macros
-// -----------------------------------------------------------------------------
-
-// Print a hint with conditional dimming
-#define PRINT_HINT(x, text, active)                \
-    do {                                           \
-        if (active) {                              \
-            attron(COLOR_PAIR(CP_ACCENT));         \
-        } else {                                   \
-            attron(COLOR_PAIR(CP_ACCENT) | A_DIM); \
-        }                                          \
-        mvprintw(y + 1, x, "%s", text);            \
-        attroff(COLOR_PAIR(CP_ACCENT) | A_DIM);    \
-        x += (int)strlen(text) + 3;                \
-    } while (0)
 
 // -----------------------------------------------------------------------------
 // ncurses Color Pairs
@@ -201,7 +187,9 @@ static char *str_case_str(const char *haystack, //
 // -----------------------------------------------------------------------------
 
 /**
- * @brief Convert a fullwidth character (U+FF00–U+FFEF) to its halfwidth ASCII equivalent.
+ * @brief Convert a fullwidth character (U+FF00–U+FFEF) to its halfwidth ASCII
+ * equivalent.
+ *
  * @param cp Unicode codepoint.
  * @return Converted codepoint, or original if not in fullwidth range.
  */
@@ -299,7 +287,33 @@ static int utf8_encode(uint32_t cp, char *buf) {
 }
 
 /**
+ * @brief Calculate the length (in terminal columns) of a UTF-8 string.
+ *
+ * @param str UTF-8 encoded string.
+ * @return Number of UTF-8 characters, or fallback to byte count on error.
+ */
+static int utf8_strlen(const char *str) {
+    if (!str || !*str)
+        return 0;
+
+    // Convert UTF-8 to wide characters for width calculation
+    wchar_t wc[MAX_LINE_LEN];
+    size_t  len = mbstowcs(wc, str, MAX_LINE_LEN - 1);
+
+    if (len == (size_t)-1) {
+        // Fallback: return byte count if conversion fails
+        return (int)strlen(str);
+    }
+    wc[len] = L'\0';
+
+    // wcswidth returns display columns (handles CJK, emojis, etc.)
+    int width = wcswidth(wc, (int)len);
+    return (width < 0) ? (int)strlen(str) : width;
+}
+
+/**
  * @brief Sanitize a UTF-8 string: convert fullwidth characters to halfwidth.
+ *
  * @param dst Output buffer.
  * @param src Input string.
  * @param dst_size Size of output buffer.
@@ -415,6 +429,33 @@ static int run_cmd(const char *cmd, //
     }
 
     return -1;
+}
+
+/**
+ * @brief Prints a styled hint at position (x,y) that may adjust the cursor
+ * position based on the text length. The hint is displayed with either normal
+ * or dimmed styling depending on the 'active' flag.
+ *
+ * @param[in] x Pointer to integer containing current X position.
+ * @param[in] y Y coordinate for the print position (used by mvprintw).
+ * @param[in] text Message to display
+ * @param[in] active Boolean flag that enables or disables normal styling
+ * movement.
+ */
+static void print_hint(int        *x, //
+                       const int   y,
+                       const char *text,
+                       bool        active) {
+    if (active) {
+        attron(COLOR_PAIR(CP_ACCENT));
+    } else {
+        attron(COLOR_PAIR(CP_ACCENT) | A_DIM);
+    }
+
+    mvprintw(y, *x, "%s", text);
+    attroff(COLOR_PAIR(CP_ACCENT) | A_DIM);
+
+    *x += (int)utf8_strlen(text) + 2;
 }
 
 // -----------------------------------------------------------------------------
@@ -929,6 +970,7 @@ static void draw_header(void) {
  * @brief Draw the footer with navigation and command hints.
  */
 static void draw_footer(void) {
+    int x = 2;
     int y = rows - 5;
 
     attron(COLOR_PAIR(CP_BORDER));
@@ -939,24 +981,24 @@ static void draw_footer(void) {
     mvaddch(y, cols - 1, ACS_RTEE);
     attroff(COLOR_PAIR(CP_BORDER));
 
-    int x = 2;
+    y += 1;
     // Always available
-    PRINT_HINT(x, "[▲/▼] Nav", 1);
-    PRINT_HINT(x, "[◀/▶] Tabs", 1);
+    print_hint(&x, y, "[▲/▼] Nav", true);
+    print_hint(&x, y, "[◀/▶] Tabs", true);
     // Tab 0 only (and requires installed models)
-    PRINT_HINT(x, "[I] Info", st.tab == 0 && st.model_cnt);
-    PRINT_HINT(x, "[D] Delete", st.tab == 0 && st.model_cnt);
+    print_hint(&x, y, "[I] Info", st.tab == 0 && st.model_cnt);
+    print_hint(&x, y, "[D] Delete", st.tab == 0 && st.model_cnt);
     // Tab 1 only (and requires running models)
-    PRINT_HINT(x, "[S] Stop", st.tab == 1 && st.running_cnt);
+    print_hint(&x, y, "[S] Stop", st.tab == 1 && st.running_cnt);
     // Always available
-    PRINT_HINT(x, "[P] Pull", 1);
-    PRINT_HINT(x, "[R] Refresh", 1);
-    PRINT_HINT(x, "[/] Search", 1);
-    PRINT_HINT(x, "[Q] Quit", 1);
+    print_hint(&x, y, "[P] Pull", true);
+    print_hint(&x, y, "[R] Refresh", true);
+    print_hint(&x, y, "[/] Search", true);
+    print_hint(&x, y, "[Q] Quit", true);
 
     if (st.pulling) {
         attron(COLOR_PAIR(CP_WARNING));
-        mvprintw(y + 1, cols - 22, " Pull in progress... ");
+        mvprintw(y, cols - 22, " Pull in progress... ");
         attroff(COLOR_PAIR(CP_WARNING));
     }
 }
