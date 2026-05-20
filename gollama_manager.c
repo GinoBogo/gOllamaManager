@@ -1032,25 +1032,20 @@ static void draw_tabs(void) {
  * @brief Draw the search filter indicator.
  */
 static void draw_search(void) {
+    const int x = 60;
+    const int y = 5;
+
     attron(COLOR_PAIR(CP_ACCENT));
-    mvprintw(6, 2, "SEARCH:");
+    mvprintw(y, x, "Search:");
     attroff(COLOR_PAIR(CP_ACCENT));
 
     attron(COLOR_PAIR(CP_DEFAULT));
     if (strlen(st.filter)) {
         attron(COLOR_PAIR(CP_SUCCESS));
-        mvprintw(6, 10, " %-30s ", st.filter);
+        mvprintw(y, x + 8, "%-30s", st.filter);
         attroff(COLOR_PAIR(CP_SUCCESS));
-
-        attron(COLOR_PAIR(CP_ACCENT));
-        mvprintw(6, 43, "[Press '/' to clear]");
-        attroff(COLOR_PAIR(CP_ACCENT));
     } else {
-        mvprintw(6, 10, " %-30s ", "(none)");
-        attron(COLOR_PAIR(CP_ACCENT));
-
-        mvprintw(6, 43, "[Press '/' to search]");
-        attroff(COLOR_PAIR(CP_ACCENT));
+        mvprintw(y, x + 8, "%-30s", "(none)");
     }
     attroff(COLOR_PAIR(CP_DEFAULT));
 }
