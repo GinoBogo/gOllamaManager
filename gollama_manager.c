@@ -696,11 +696,13 @@ static inline void cleanup(void) {
  * @param[in] h Dialog height.
  * @param[in] sy Starting Y position (row).
  * @param[in] sx Starting X position (column).
+ * @param[in] title Null-terminated title string.
  */
-static void draw_dialog_box(int w, //
-                            int h,
-                            int sy,
-                            int sx) {
+static void draw_dialog_box(int         w, //
+                            int         h,
+                            int         sy,
+                            int         sx,
+                            const char *title) {
     attron(COLOR_PAIR(CP_DIALOG));
     for (int i = 0; i < h; i++) {
         for (int j = 0; j < w; j++) {
@@ -722,6 +724,14 @@ static void draw_dialog_box(int w, //
     mvaddch(sy + h - 1, sx + w - 1, ACS_LRCORNER);
     // clang-format on
     attroff(COLOR_PAIR(CP_DIALOG_BORDER));
+
+    int title_len = (int)strlen(title);
+
+    if (title != NULL && title_len > 0) {
+        attron(COLOR_PAIR(CP_HEADER) | A_BOLD);
+        mvprintw(sy, sx + (w - title_len - 2) / 2, " %s ", title);
+        attroff(A_BOLD | COLOR_PAIR(CP_HEADER));
+    }
 }
 
 /**
@@ -1125,7 +1135,7 @@ static void draw_info_dialog(void) {
  * used by both the pull and search dialogs.  Only the title centred on row 1
  * and the hint centred on row 4 differ between the two callers.
  *
- * @param[in] title Null-terminated title string (including surrounding spaces).
+ * @param[in] title Null-terminated title string.
  * @param[in] hint  Null-terminated footer hint string.
  */
 static void draw_input_dialog(const char *title, //
@@ -1135,11 +1145,7 @@ static void draw_input_dialog(const char *title, //
     int sy = (rows - h) / 2;
     int sx = (cols - w) / 2;
 
-    draw_dialog_box(w, h, sy, sx);
-
-    attron(COLOR_PAIR(CP_HEADER) | A_BOLD);
-    mvprintw(sy + 1, sx + (w - (int)strlen(title)) / 2, "%s", title);
-    attroff(A_BOLD | COLOR_PAIR(CP_HEADER));
+    draw_dialog_box(w, h, sy, sx, title);
 
     attron(COLOR_PAIR(CP_DIALOG));
     mvprintw(sy + 2, sx + 3, "Model:");
@@ -1172,7 +1178,7 @@ static void draw_input_dialog(const char *title, //
 
     attron(COLOR_PAIR(CP_ACCENT));
     int hint_len = (int)strlen(hint);
-    mvprintw(sy + 4, sx + (w - hint_len) / 2, "%s", hint);
+    mvprintw(sy + 4, sx + (w - hint_len - 2) / 2, " %s ", hint);
     attroff(COLOR_PAIR(CP_ACCENT));
 }
 
@@ -1180,14 +1186,14 @@ static void draw_input_dialog(const char *title, //
  * @brief Draw the pull model dialog with text input.
  */
 static void draw_pull_dialog(void) {
-    draw_input_dialog(" PULL MODEL ", " Press ENTER to pull, ESC to cancel ");
+    draw_input_dialog("PULL MODEL", "Press ENTER to pull, ESC to cancel");
 }
 
 /**
  * @brief Draw the search dialog with text input.
  */
 static void draw_search_dialog(void) {
-    draw_input_dialog(" SEARCH MODEL ", " Press ENTER to search, ESC to cancel ");
+    draw_input_dialog("SEARCH MODEL", "Press ENTER to search, ESC to cancel");
 }
 
 // -----------------------------------------------------------------------------
@@ -1198,30 +1204,33 @@ static void draw_search_dialog(void) {
  * @brief Draw a confirmation dialog with OK and Cancel buttons.
  */
 static void draw_confirm_dialog(void) {
-    int w  = 64;
+    int msg_len  = strlen(st.confirm_msg);
+    int msg_xpad = 2;
+
+    int w  = msg_xpad + (1 + msg_len + 1) + msg_xpad;
     int h  = 6;
     int sy = (rows - h) / 2;
     int sx = (cols - w) / 2;
 
-    draw_dialog_box(w, h, sy, sx);
+    draw_dialog_box(w, h, sy, sx, "WARNING");
+
+    int msg_x = sx + msg_xpad;
 
     attron(COLOR_PAIR(CP_DEFAULT));
-    int msg_len = strlen(st.confirm_msg);
-    int msg_x   = sx + (w - msg_len) / 2;
     mvprintw(sy + 2, msg_x, " %s ", st.confirm_msg);
     attroff(COLOR_PAIR(CP_DEFAULT));
 
-    int btn_ok_x     = sx + w / 2 - 12;
-    int btn_cancel_x = sx + w / 2 + 2;
+    int btn_ok_x     = sx + (w / 2) - 12;
+    int btn_cancel_x = sx + (w / 2) + 2;
 
     attron(COLOR_PAIR(CP_ACCENT) | A_BOLD);
     if (st.confirm_choice == 1) {
         attron(A_REVERSE);
-        mvprintw(sy + 4, btn_ok_x, "[ OK ]");
+        mvprintw(sy + 4, btn_ok_x, "[   OK   ]");
         attroff(A_REVERSE);
         mvprintw(sy + 4, btn_cancel_x, "[ Cancel ]");
     } else {
-        mvprintw(sy + 4, btn_ok_x, "[ OK ]");
+        mvprintw(sy + 4, btn_ok_x, "[   OK   ]");
         attron(A_REVERSE);
         mvprintw(sy + 4, btn_cancel_x, "[ Cancel ]");
         attroff(A_REVERSE);
