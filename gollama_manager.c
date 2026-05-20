@@ -45,6 +45,23 @@
 #define MAX_CMD_OUT     32768
 
 // -----------------------------------------------------------------------------
+// Macros
+// -----------------------------------------------------------------------------
+
+// Print a hint with conditional dimming
+#define PRINT_HINT(x, text, active)                \
+    do {                                           \
+        if (active) {                              \
+            attron(COLOR_PAIR(CP_ACCENT));         \
+        } else {                                   \
+            attron(COLOR_PAIR(CP_ACCENT) | A_DIM); \
+        }                                          \
+        mvprintw(y + 1, x, "%s", text);            \
+        attroff(COLOR_PAIR(CP_ACCENT) | A_DIM);    \
+        x += (int)strlen(text) + 3;                \
+    } while (0)
+
+// -----------------------------------------------------------------------------
 // ncurses Color Pairs
 // -----------------------------------------------------------------------------
 
@@ -915,52 +932,27 @@ static void draw_footer(void) {
     int y = rows - 5;
 
     attron(COLOR_PAIR(CP_BORDER));
-    // clang-format off
-    for (int i = 0; i < cols; i++) { mvaddch(y, i, ACS_HLINE); }
-
-    mvaddch(y, 0       , ACS_LTEE);
+    for (int i = 0; i < cols; i++) {
+        mvaddch(y, i, ACS_HLINE);
+    }
+    mvaddch(y, 0, ACS_LTEE);
     mvaddch(y, cols - 1, ACS_RTEE);
-    // clang-format on
     attroff(COLOR_PAIR(CP_BORDER));
 
-    attron(COLOR_PAIR(CP_ACCENT));
-    {
-        int x = 2;
-        mvprintw(y + 1, x, "[▲/▼] Nav");
-        x += 10;
-        mvprintw(y + 1, x, "  ");
-        x += 2;
-        mvprintw(y + 1, x, "[◀/▶] Tabs");
-        x += 11;
-        mvprintw(y + 1, x, "  ");
-        x += 2;
-        mvprintw(y + 1, x, "[I] Info");
-        x += 9;
-        mvprintw(y + 1, x, "  ");
-        x += 2;
-        mvprintw(y + 1, x, "[D] Delete");
-        x += 11;
-        mvprintw(y + 1, x, "  ");
-        x += 2;
-        mvprintw(y + 1, x, "[S] Stop");
-        x += 9;
-        mvprintw(y + 1, x, "  ");
-        x += 2;
-        mvprintw(y + 1, x, "[P] Pull");
-        x += 9;
-        mvprintw(y + 1, x, "  ");
-        x += 2;
-        mvprintw(y + 1, x, "[R] Refresh");
-        x += 12;
-        mvprintw(y + 1, x, "  ");
-        x += 2;
-        mvprintw(y + 1, x, "[/] Search");
-        x += 11;
-        mvprintw(y + 1, x, "  ");
-        x += 2;
-        mvprintw(y + 1, x, "[Q] Quit");
-    }
-    attroff(COLOR_PAIR(CP_ACCENT));
+    int x = 2;
+    // Always available
+    PRINT_HINT(x, "[▲/▼] Nav", 1);
+    PRINT_HINT(x, "[◀/▶] Tabs", 1);
+    // Tab 0 only (and requires installed models)
+    PRINT_HINT(x, "[I] Info", st.tab == 0 && st.model_cnt);
+    PRINT_HINT(x, "[D] Delete", st.tab == 0 && st.model_cnt);
+    // Tab 1 only (and requires running models)
+    PRINT_HINT(x, "[S] Stop", st.tab == 1 && st.running_cnt);
+    // Always available
+    PRINT_HINT(x, "[P] Pull", 1);
+    PRINT_HINT(x, "[R] Refresh", 1);
+    PRINT_HINT(x, "[/] Search", 1);
+    PRINT_HINT(x, "[Q] Quit", 1);
 
     if (st.pulling) {
         attron(COLOR_PAIR(CP_WARNING));
