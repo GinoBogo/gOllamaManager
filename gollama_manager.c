@@ -901,20 +901,20 @@ static void draw_dialog_box(int         w, //
                             int         sy,
                             int         sx,
                             const char *title) {
+    // Background fill (solid block)
     attron(COLOR_PAIR(CP_DIALOG));
     for (int i = 0; i < h; i++) {
-        for (int j = 0; j < w; j++) {
-            mvaddch(sy + i, sx + j, ' ');
-        }
+        mvhline(sy + i, sx, ' ', w);
     }
     attroff(COLOR_PAIR(CP_DIALOG));
 
+    // Border
     attron(COLOR_PAIR(CP_DIALOG_BORDER));
     // clang-format off
-    for (int i = 0; i < w; i++) { mvaddch(sy        , sx + i    , ACS_HLINE); }
-    for (int i = 0; i < w; i++) { mvaddch(sy + h - 1, sx + i    , ACS_HLINE); }
-    for (int i = 0; i < h; i++) { mvaddch(sy + i    , sx        , ACS_VLINE); }
-    for (int i = 0; i < h; i++) { mvaddch(sy + i    , sx + w - 1, ACS_VLINE); }
+    mvhline(sy        , sx        , ACS_HLINE, w);
+    mvhline(sy + h - 1, sx        , ACS_HLINE, w);
+    mvvline(sy        , sx        , ACS_VLINE, h);
+    mvvline(sy        , sx + w - 1, ACS_VLINE, h);
 
     mvaddch(sy        , sx        , ACS_ULCORNER);
     mvaddch(sy        , sx + w - 1, ACS_URCORNER);
@@ -923,9 +923,9 @@ static void draw_dialog_box(int         w, //
     // clang-format on
     attroff(COLOR_PAIR(CP_DIALOG_BORDER));
 
-    int title_len = (int)strlen(title);
-
-    if (title != NULL && title_len > 0) {
+    // Title
+    if (title != NULL && strlen(title) > 0) {
+        int title_len = (int)strlen(title);
         attron(COLOR_PAIR(CP_HEADER) | A_BOLD);
         mvprintw(sy, sx + (w - title_len - 2) / 2, " %s ", title);
         attroff(A_BOLD | COLOR_PAIR(CP_HEADER));
@@ -939,11 +939,10 @@ static void draw_header(void) {
     attron(COLOR_PAIR(CP_HEADER));
     {
         attron(A_BOLD);
-        // clang-format off
-        for (int i = 0; i < cols; i++) { mvaddch(0, i, ' '); }
-        for (int i = 0; i < cols; i++) { mvaddch(3, i, ' '); }
+        // Clear row 0 and row 3 with spaces
+        mvhline(0, 0, ' ', cols);
+        mvhline(3, 0, ' ', cols);
         mvprintw(1, 2, " OLLAMA MODEL MANAGER ");
-        // clang-format on
         attroff(A_BOLD);
 
         if (strlen(st.status)) {
@@ -956,12 +955,9 @@ static void draw_header(void) {
 
     attron(COLOR_PAIR(CP_BORDER));
     {
-        // clang-format off
-        for (int i = 0; i < cols; i++) { mvaddch(3, i, ACS_HLINE); }
-
-        mvaddch(3, 0       , ACS_LTEE);
+        mvhline(3, 0, ACS_HLINE, cols);
+        mvaddch(3, 0, ACS_LTEE);
         mvaddch(3, cols - 1, ACS_RTEE);
-        // clang-format on
     }
     attroff(COLOR_PAIR(CP_BORDER));
 }
@@ -974,9 +970,7 @@ static void draw_footer(void) {
     int y = rows - 5;
 
     attron(COLOR_PAIR(CP_BORDER));
-    for (int i = 0; i < cols; i++) {
-        mvaddch(y, i, ACS_HLINE);
-    }
+    mvhline(y, 0, ACS_HLINE, cols);
     mvaddch(y, 0, ACS_LTEE);
     mvaddch(y, cols - 1, ACS_RTEE);
     attroff(COLOR_PAIR(CP_BORDER));
@@ -1077,9 +1071,7 @@ static void draw_model_list(void) {
     attroff(A_BOLD | COLOR_PAIR(CP_ACCENT));
 
     attron(COLOR_PAIR(CP_BORDER));
-    for (int i = 2; i < cols - 2; i++) {
-        mvaddch(yh + 1, i, ACS_HLINE);
-    }
+    mvhline(yh + 1, 2, ACS_HLINE, cols - 4);
     attroff(COLOR_PAIR(CP_BORDER));
 
     for (int i = 0; i < maxrows; i++) {
@@ -1167,7 +1159,7 @@ static void draw_running_list(void) {
     attroff(A_BOLD | COLOR_PAIR(CP_ACCENT));
 
     attron(COLOR_PAIR(CP_BORDER));
-    for (int i = 2; i < cols - 2; i++) mvaddch(yh + 1, i, ACS_HLINE);
+    mvhline(yh + 1, 2, ACS_HLINE, cols - 4);
     attroff(COLOR_PAIR(CP_BORDER));
 
     for (int i = 0; i < maxrows; i++) mvprintw(ylist + i, 2, "%*s", cols - 4, "");
@@ -1207,9 +1199,7 @@ static void draw_log(void) {
     int y = rows - 3;
 
     attron(COLOR_PAIR(CP_BORDER));
-    for (int i = 0; i < cols; i++) {
-        mvaddch(y, i, ACS_HLINE);
-    }
+    mvhline(y, 0, ACS_HLINE, cols);
     mvaddch(y, 0, ACS_LTEE);
     mvaddch(y, cols - 1, ACS_RTEE);
     attroff(COLOR_PAIR(CP_BORDER));
