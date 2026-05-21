@@ -158,21 +158,41 @@ static void clear_term(void) {
  */
 static char *_strcasestr(const char *haystack, //
                          const char *needle) {
-    if (!haystack || !needle || !*needle) {
-        return !*needle ? (char *)haystack : NULL; // Empty needle matches at start
+    // Handle NULL pointers
+    if (!haystack || !needle) {
+        return NULL;
+    }
+
+    // Empty needle matches at start (POSIX behavior)
+    if (!*needle) {
+        return (char *)haystack;
     }
 
     size_t n_len = strlen(needle);
 
     for (const char *p = haystack; *p; ++p) {
-        // Check if needle matches starting at position p
+        // Skip if not enough chars remain
+        if (strlen(p) < n_len) {
+            break;
+        }
+
         size_t i;
         for (i = 0; i < n_len; ++i) {
-            if (tolower((unsigned char)p[i]) != tolower((unsigned char)needle[i])) {
+            // Loop stops at haystack's null terminator
+            if (p[i] == '\0') {
+                break;
+            }
+
+            unsigned char h_char = (unsigned char)p[i];
+            unsigned char n_char = (unsigned char)needle[i];
+
+            if (tolower(h_char) != tolower(n_char)) {
                 break; // Mismatch
             }
         }
-        if (i == n_len) { // All characters matched
+
+        // Success only if ALL needle characters matched
+        if (i == n_len) {
             return (char *)p;
         }
     }
