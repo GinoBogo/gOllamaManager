@@ -448,8 +448,11 @@ static int run_cmd(const char *cmd, //
     size_t len = 0;
 
     while (fgets(buf, sizeof(buf), fp) && len < sz - 1) {
-        len += snprintf(out + len, sz - len, "%s", buf);
+        for (size_t i = 0; buf[i] != '\0' && len < sz - 1; ++i) {
+            out[len++] = buf[i];
+        }
     }
+    out[len] = '\0';
 
     int status = pclose(fp);
     if (old_cwd_ok) {
@@ -472,8 +475,8 @@ static int run_cmd(const char *cmd, //
  *
  * @param[in] x Pointer to integer containing current X position.
  * @param[in] y Y coordinate for the print position (used by mvprintw).
- * @param[in] text Message to display
- * @param[in] active Boolean flag that enables or disables normal styling
+ * @param[in] text Message to display.
+ * @param[in] active Boolean flag that enables or disables normal styling.
  * movement.
  */
 static void print_hint(int        *x, //
