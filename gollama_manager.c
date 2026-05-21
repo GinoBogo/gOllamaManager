@@ -171,18 +171,9 @@ static char *_strcasestr(const char *haystack, //
     size_t n_len = strlen(needle);
 
     for (const char *p = haystack; *p; ++p) {
-        // Skip if not enough chars remain
-        if (strlen(p) < n_len) {
-            break;
-        }
-
         size_t i;
-        for (i = 0; i < n_len; ++i) {
-            // Loop stops at haystack's null terminator
-            if (p[i] == '\0') {
-                break;
-            }
 
+        for (i = 0; i < n_len && p[i]; ++i) {
             unsigned char h_char = (unsigned char)p[i];
             unsigned char n_char = (unsigned char)needle[i];
 
