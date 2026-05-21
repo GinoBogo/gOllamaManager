@@ -152,31 +152,28 @@ static void clear_term(void) {
  * strcasestr).
  *
  * @param[in] haystack String to search in.
- * @param[in] needle   Substring to search for.
+ * @param[in] needle Substring to search for.
  * @return Pointer to the first occurrence of needle within haystack, or NULL if
  * not found.
  */
-static char *str_case_str(const char *haystack, //
-                          const char *needle) {
-    if (!*needle) {
-        return (char *)haystack;
+static char *_strcasestr(const char *haystack, //
+                         const char *needle) {
+    if (!haystack || !needle || !*needle) {
+        return !*needle ? (char *)haystack : NULL; // Empty needle matches at start
     }
 
-    size_t needle_len = strlen(needle);
+    size_t n_len = strlen(needle);
 
-    for (const char *p = haystack; *p; p++) {
-        if (tolower((unsigned char)*p) == tolower((unsigned char)*needle)) {
-            size_t i;
-
-            for (i = 1; i < needle_len; i++) {
-                if (tolower((unsigned char)p[i]) != tolower((unsigned char)needle[i])) {
-                    break;
-                }
+    for (const char *p = haystack; *p; ++p) {
+        // Check if needle matches starting at position p
+        size_t i;
+        for (i = 0; i < n_len; ++i) {
+            if (tolower((unsigned char)p[i]) != tolower((unsigned char)needle[i])) {
+                break; // Mismatch
             }
-
-            if (i == needle_len) {
-                return (char *)p;
-            }
+        }
+        if (i == n_len) { // All characters matched
+            return (char *)p;
         }
     }
     return NULL;
@@ -1090,7 +1087,7 @@ static void draw_model_list(void) {
                 break;
             }
 
-        if (strlen(st.filter) && !str_case_str(st.models[i].name, st.filter)) {
+        if (strlen(st.filter) && !_strcasestr(st.models[i].name, st.filter)) {
             continue;
         }
 
@@ -1721,7 +1718,7 @@ static int get_selected_model_name(char *out_buf) {
 
     pthread_mutex_lock(&st.mutex);
     for (int i = 0; i < st.model_cnt; i++) {
-        if (!strlen(st.filter) || str_case_str(st.models[i].name, st.filter)) {
+        if (!strlen(st.filter) || _strcasestr(st.models[i].name, st.filter)) {
             if (vis == st.sel_model) {
                 snprintf(out_buf, MAX_NAME_LEN, "%s", st.models[i].name);
                 found = 1;
@@ -1744,7 +1741,7 @@ static int get_visible_model_count(void) {
 
     pthread_mutex_lock(&st.mutex);
     for (int i = 0; i < st.model_cnt; i++)
-        if (!strlen(st.filter) || str_case_str(st.models[i].name, st.filter))
+        if (!strlen(st.filter) || _strcasestr(st.models[i].name, st.filter))
             vis++;
     pthread_mutex_unlock(&st.mutex);
     return vis;
