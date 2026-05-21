@@ -18,17 +18,18 @@
 /* ************************************************************************** */
 
 #define _XOPEN_SOURCE 600 // POSIX.1-2001 (or use 700 for newer)
-#include <ctype.h>        // isprint, tolower
-#include <locale.h>       // LC_ALL, setlocale
-#include <ncurses.h>      // ACS_HLINE, ACS_LLCORNER, ACS_LRCORNER, ACS_LTEE, ACS_RTEE ...
-#include <pthread.h>      // pthread_create, pthread_detach, pthread_mutex_destroy, ...
-#include <stdarg.h>       // va_list, va_start, va_end
-#include <stdbool.h>      // bool, false, true
-#include <stdio.h>        // FILE, fflush, fgets, fprintf, getchar, ...
-#include <stdlib.h>       // WEXITSTATUS, WIFEXITED, exit, system
-#include <string.h>       // memcpy, memset, strcmp, strlen, strtok, ...
-#include <unistd.h>       // NULL, chdir, getcwd
-#include <wchar.h>        // wchar_t, wcswidth
+
+#include <ctype.h>   // isprint, tolower
+#include <locale.h>  // LC_ALL, setlocale
+#include <ncurses.h> // ACS_HLINE, ACS_LLCORNER, ACS_LRCORNER, ACS_LTEE, ACS_RTEE ...
+#include <pthread.h> // pthread_create, pthread_detach, pthread_mutex_destroy, ...
+#include <stdarg.h>  // va_list, va_start, va_end
+#include <stdbool.h> // bool, false, true
+#include <stdio.h>   // FILE, fflush, fgets, fprintf, getchar, ...
+#include <stdlib.h>  // WEXITSTATUS, WIFEXITED, exit, getenv, mbstowcs, system
+#include <string.h>  // memcpy, memset, strcmp, strlen, strtok, ...
+#include <unistd.h>  // NULL, chdir, getcwd
+#include <wchar.h>   // wchar_t, wcswidth
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -46,6 +47,12 @@
 #define MIN_COL_PAD     2
 #define MAX_COL_WIDTH   40
 #define MAX_CMD_OUT     32768
+
+// -----------------------------------------------------------------------------
+// Defines
+// -----------------------------------------------------------------------------
+
+#define UNUSED_FUNC __attribute__((__unused__)) // Unused function
 
 // -----------------------------------------------------------------------------
 // ncurses Color Pairs
@@ -211,12 +218,15 @@ static uint32_t fullwidth_to_halfwidth(uint32_t cp) {
         return '|';
     }
     // Fullwidth cent, pound, etc. (optional)
-    if (cp == 0xFFE0)
-        return 0xA2; // cent
-    if (cp == 0xFFE1)
-        return 0xA3; // pound
-    if (cp == 0xFFE5)
-        return 0xA5; // yen
+    if (cp == 0xFFE0) { // cent
+        return 0xA2;
+    }
+    if (cp == 0xFFE1) { // pound
+        return 0xA3;
+    }
+    if (cp == 0xFFE5) { // yen
+        return 0xA5;
+    }
     // Everything else stays as is
     return cp;
 }
@@ -228,7 +238,8 @@ static uint32_t fullwidth_to_halfwidth(uint32_t cp) {
  * @param len Number of bytes consumed (output).
  * @return Unicode codepoint, or 0xFFFD on error.
  */
-static uint32_t utf8_decode(const char *s, int *len) {
+static uint32_t utf8_decode(const char *s, //
+                            int        *len) {
     unsigned char c = (unsigned char)s[0];
 
     if (c < 0x80) {
@@ -268,7 +279,8 @@ static uint32_t utf8_decode(const char *s, int *len) {
  * @param buf Output buffer (at least 4 bytes).
  * @return Number of bytes written.
  */
-static int utf8_encode(uint32_t cp, char *buf) {
+static int utf8_encode(uint32_t cp, //
+                       char    *buf) {
     if (cp < 0x80) {
         buf[0] = (char)cp;
         return 1;
@@ -326,7 +338,9 @@ static int utf8_strlen(const char *str) {
  * @param src Input string.
  * @param dst_size Size of output buffer.
  */
-static void sanitize_fullwidth(char *dst, const char *src, size_t dst_size) {
+static void sanitize_fullwidth(char       *dst, //
+                               const char *src,
+                               size_t      dst_size) {
     size_t di = 0;
 
     while (*src && di < dst_size - 4) { // room for worst-case 4 bytes
@@ -364,9 +378,23 @@ static void sanitize_fullwidth(char *dst, const char *src, size_t dst_size) {
  * This function attempts to change the process's working directory to root. If
  * the operation fails, it is ignored (best effort).
  */
+UNUSED_FUNC
 static void chdir2root(void) {
     /* Change current working directory to root */
     if (chdir("/") == -1) {
+        /* ignore – best effort */
+    }
+}
+
+/**
+ * @brief Change current working directory to user's home ("/home/user")
+ *
+ * This function attempts to change the process's working directory to the
+ * user's home directory. If the operation fails, it is ignored (best effort).
+ */
+static void chdir2home(void) {
+    /* Change current working directory to user's home */
+    if (chdir(getenv("HOME")) == -1) {
         /* ignore – best effort */
     }
 }
@@ -397,39 +425,37 @@ static void chdir2prev(const char *path) {
 static int run_cmd(const char *cmd, //
                    char       *out,
                    size_t      sz) {
-    char old_cwd[4096];
-    int  have_old = 0;
-
-    if (getcwd(old_cwd, sizeof(old_cwd)) != NULL) {
-        have_old = 1;
+    if (!cmd || !out || !sz) {
+        return -1;
     }
-    chdir2root(); /* change to root for security */
+
+    out[0] = '\0';
+
+    char old_cwd[4096];
+    bool old_cwd_ok = getcwd(old_cwd, sizeof(old_cwd)) != NULL;
+
+    chdir2home(); /* change to user's home for security */
 
     FILE *fp = popen(cmd, "r");
     if (!fp) {
-        if (out)
-            out[0] = '\0';
-        if (have_old) {
+        if (old_cwd_ok) {
             chdir2prev(old_cwd);
         }
         return -1;
     }
 
-    if (out) {
-        out[0] = '\0';
-        char   buf[MAX_LINE_LEN];
-        size_t len = 0;
+    char   buf[MAX_LINE_LEN];
+    size_t len = 0;
 
-        while (fgets(buf, sizeof(buf), fp) && len < sz - 1) {
-            len += snprintf(out + len, sz - len, "%s", buf);
-        }
+    while (fgets(buf, sizeof(buf), fp) && len < sz - 1) {
+        len += snprintf(out + len, sz - len, "%s", buf);
     }
 
     int status = pclose(fp);
-    if (have_old) {
+    if (old_cwd_ok) {
         chdir2prev(old_cwd); /* restore original working directory */
     } else {
-        chdir2root(); /* keep root if we couldn't get old cwd */
+        chdir2home(); /* keep user's home if we couldn't get old cwd */
     }
 
     if (WIFEXITED(status)) {
