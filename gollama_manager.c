@@ -95,7 +95,7 @@ typedef struct {
     char id[MAX_ID_LEN];     /**< Model identifier (hash) */
     char size[MAX_SIZE_LEN]; /**< Human-readable size */
     char date[MAX_DATE_LEN]; /**< Last modified date */
-} Model;
+} LsModel;
 
 /**
  * @brief Represents a running model instance.
@@ -107,19 +107,19 @@ typedef struct {
     char proc[MAX_PROC_LEN];       /**< Processor usage (percentage + CPU/GPU) */
     char context[MAX_CONTEXT_LEN]; /**< Context window size */
     char expires[MAX_DATE_LEN];    /**< Expiration time */
-} Running;
+} PsModel;
 
 /**
  * @brief Global application state.
  */
 static struct {
-    Model           models[MAX_MODELS];           /**< Array of installed models */
-    Running         running[MAX_MODELS];          /**< Array of running models */
+    LsModel         ls_models[MAX_MODELS];        /**< Array of installed models */
+    PsModel         ps_models[MAX_MODELS];        /**< Array of running models */
     char            filter[MAX_NAME_LEN];         /**< Search filter string */
-    int             sel_model;                    /**< Selected index in installed list */
-    int             sel_running;                  /**< Selected index in running list */
-    int             model_cnt;                    /**< Number of installed models */
-    int             running_cnt;                  /**< Number of running models */
+    int             sel_ls_model;                 /**< Selected index in installed list */
+    int             sel_ps_model;                 /**< Selected index in running list */
+    int             ls_model_cnt;                 /**< Number of installed models */
+    int             ps_model_cnt;                 /**< Number of running models */
     int             tab;                          /**< 0 = installed, 1 = running */
     int             pulling;                      /**< Non-zero if a pull operation is in progress */
     char            status[MAX_LOG_LEN];          /**< Status message displayed in header */
@@ -540,15 +540,15 @@ static void print_hint(int        *x, //
 // -----------------------------------------------------------------------------
 
 /**
- * @brief Parse the output of `ollama list` into a local Model array.
+ * @brief Parse the output of `ollama list` into a local LsModel array.
  *
  * @param[in] out The raw text output from `ollama list`.
- * @param[out] dest Destination Model array.
+ * @param[out] dest Destination LsModel array.
  * @param[out] cnt Number of models parsed (set by the function).
  */
-static void parse_list_into(const char *out, //
-                            Model      *dest,
-                            int        *cnt) {
+static void parse_ls_into(const char *out, //
+                          LsModel    *dest,
+                          int        *cnt) {
     char work[MAX_CMD_OUT];
     snprintf(work, sizeof(work), "%s", out);
 
@@ -610,14 +610,14 @@ static void parse_list_into(const char *out, //
 }
 
 /**
- * @brief Parse the output of `ollama ps` into a local Running array.
+ * @brief Parse the output of `ollama ps` into a local PsModel array.
  *
  * @param[in] out The raw text output from `ollama ps`.
- * @param[out] dest Destination Running array.
+ * @param[out] dest Destination PsModel array.
  * @param[out] cnt Number of running models parsed (set by the function).
  */
 static void parse_ps_into(const char *out, //
-                          Running    *dest,
+                          PsModel    *dest,
                           int        *cnt) {
     char work[MAX_CMD_OUT];
     snprintf(work, sizeof(work), "%s", out);
@@ -693,25 +693,25 @@ static void parse_ps_into(const char *out, //
 /**
  * @brief Compute optimal column widths from local arrays.
  *
- * @param[in] models      Array of installed models.
- * @param[in] model_cnt   Number of installed models.
- * @param[in] running     Array of running models.
- * @param[in] running_cnt Number of running models.
- * @param[out] col_name   Installed tab: width for model name.
- * @param[out] col_id     Installed tab: width for ID.
- * @param[out] col_size   Installed tab: width for size.
- * @param[out] col_date   Installed tab: width for date.
- * @param[out] rcol_name  Running tab: width for model name.
- * @param[out] rcol_id    Running tab: width for ID.
- * @param[out] rcol_size  Running tab: width for size.
- * @param[out] rcol_proc  Running tab: width for processor.
- * @param[out] rcol_ctx   Running tab: width for context.
- * @param[out] rcol_exp   Running tab: width for expires.
+ * @param[in]  ls_models    Array of installed models.
+ * @param[in]  ls_model_cnt Number of installed models.
+ * @param[in]  ps_models    Array of running models.
+ * @param[in]  ps_model_cnt Number of running models.
+ * @param[out] col_name     Installed tab: width for model name.
+ * @param[out] col_id       Installed tab: width for ID.
+ * @param[out] col_size     Installed tab: width for size.
+ * @param[out] col_date     Installed tab: width for date.
+ * @param[out] rcol_name    Running tab: width for model name.
+ * @param[out] rcol_id      Running tab: width for ID.
+ * @param[out] rcol_size    Running tab: width for size.
+ * @param[out] rcol_proc    Running tab: width for processor.
+ * @param[out] rcol_ctx     Running tab: width for context.
+ * @param[out] rcol_exp     Running tab: width for expires.
  */
-static void compute_widths_from(const Model   *models, //
-                                int            model_cnt,
-                                const Running *running,
-                                int            running_cnt,
+static void compute_widths_from(const LsModel *ls_models, //
+                                int            ls_model_cnt,
+                                const PsModel *ps_models,
+                                int            ps_model_cnt,
                                 int           *col_name,
                                 int           *col_id,
                                 int           *col_size,
@@ -728,11 +728,11 @@ static void compute_widths_from(const Model   *models, //
     int w_size = strlen("SIZE"      );
     int w_date = strlen("MODIFIED"  );
 
-    for (int i = 0, l; i < model_cnt; i++) {
-        l = strlen(models[i].name); if (l > w_name) { w_name = l; }
-        l = strlen(models[i].id  ); if (l > w_id  ) { w_id   = l; }
-        l = strlen(models[i].size); if (l > w_size) { w_size = l; }
-        l = strlen(models[i].date); if (l > w_date) { w_date = l; }
+    for (int i = 0, l; i < ls_model_cnt; i++) {
+        l = strlen(ls_models[i].name); if (l > w_name) { w_name = l; }
+        l = strlen(ls_models[i].id  ); if (l > w_id  ) { w_id   = l; }
+        l = strlen(ls_models[i].size); if (l > w_size) { w_size = l; }
+        l = strlen(ls_models[i].date); if (l > w_date) { w_date = l; }
     }
     w_name += 2; /* for the "* " prefix on running models */
 
@@ -754,13 +754,13 @@ static void compute_widths_from(const Model   *models, //
     int w_ctx  = strlen("CONTEXT"   );
     int w_exp  = strlen("EXPIRES"   );
 
-    for (int i = 0, l; i < running_cnt; i++) {
-        l = strlen(running[i].name   ); if (l > w_name) { w_name = l; }
-        l = strlen(running[i].id     ); if (l > w_id  ) { w_id   = l; }
-        l = strlen(running[i].size   ); if (l > w_size) { w_size = l; }
-        l = strlen(running[i].proc   ); if (l > w_proc) { w_proc = l; }
-        l = strlen(running[i].context); if (l > w_ctx ) { w_ctx  = l; }
-        l = strlen(running[i].expires); if (l > w_exp ) { w_exp  = l; }
+    for (int i = 0, l; i < ps_model_cnt; i++) {
+        l = strlen(ps_models[i].name   ); if (l > w_name) { w_name = l; }
+        l = strlen(ps_models[i].id     ); if (l > w_id  ) { w_id   = l; }
+        l = strlen(ps_models[i].size   ); if (l > w_size) { w_size = l; }
+        l = strlen(ps_models[i].proc   ); if (l > w_proc) { w_proc = l; }
+        l = strlen(ps_models[i].context); if (l > w_ctx ) { w_ctx  = l; }
+        l = strlen(ps_models[i].expires); if (l > w_exp ) { w_exp  = l; }
     }
 
     if (w_name > MAX_COL_WIDTH) { w_name = MAX_COL_WIDTH; }
@@ -852,17 +852,45 @@ static void show_info(const char *name) {
 // -----------------------------------------------------------------------------
 
 /**
+ * @brief Thread function to execute the ollama list command.
+ *
+ * This function runs the 'ollama list' command and outputs the result to the
+ * specified buffer.
+ *
+ * @param[out] arg Pointer to the buffer where the output will be stored.
+ * @return NULL Always returns NULL.
+ */
+static void *ls_thread(void *arg) {
+    run_cmd("ollama list 2>/dev/null", (char *)arg, MAX_CMD_OUT);
+    return NULL;
+}
+
+/**
+ * @brief Executes the 'ollama ps' command and stores the output.
+ *
+ * This function runs the command 'ollama ps' and redirects any error messages
+ * to /dev/null. The output is stored in the buffer provided by the caller,
+ * which must have a size of at least MAX_CMD_OUT.
+ *
+ * @param[out] arg Pointer to the buffer where the output will be stored.
+ * @return NULL Always returns NULL.
+ */
+static void *ps_thread(void *arg) {
+    run_cmd("ollama ps 2>/dev/null", (char *)arg, MAX_CMD_OUT);
+    return NULL;
+}
+
+/**
  * @brief Refresh model and running data by invoking ollama commands.
  *
  * This function fetches fresh data into local buffers, then locks the mutex
  * only to memcpy the results into the global state. This minimizes UI stutter.
  */
 static void refresh_data(void) {
-    char    out[MAX_CMD_OUT];
-    Model   local_models[MAX_MODELS];
-    Running local_running[MAX_MODELS];
-    int     local_model_cnt   = 0;
-    int     local_running_cnt = 0;
+    LsModel local_ls_models[MAX_MODELS];
+    PsModel local_ps_models[MAX_MODELS];
+    int     local_ls_model_cnt = 0;
+    int     local_ps_model_cnt = 0;
     int     local_col_name;
     int     local_col_id;
     int     local_col_size;
@@ -874,16 +902,23 @@ static void refresh_data(void) {
     int     local_rcol_ctx;
     int     local_rcol_exp;
 
-    run_cmd("ollama list 2>/dev/null", out, sizeof(out));
-    parse_list_into(out, local_models, &local_model_cnt);
+    char ls_out[MAX_CMD_OUT];
+    char ps_out[MAX_CMD_OUT];
 
-    run_cmd("ollama ps 2>/dev/null", out, sizeof(out));
-    parse_ps_into(out, local_running, &local_running_cnt);
+    pthread_t t1, t2;
+    pthread_create(&t1, NULL, ls_thread, ls_out);
+    pthread_create(&t2, NULL, ps_thread, ps_out);
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
 
-    compute_widths_from(local_models, //
-                        local_model_cnt,
-                        local_running,
-                        local_running_cnt,
+    parse_ls_into(ls_out, local_ls_models, &local_ls_model_cnt);
+
+    parse_ps_into(ps_out, local_ps_models, &local_ps_model_cnt);
+
+    compute_widths_from(local_ls_models, //
+                        local_ls_model_cnt,
+                        local_ps_models,
+                        local_ps_model_cnt,
                         &local_col_name,
                         &local_col_id,
                         &local_col_size,
@@ -897,11 +932,11 @@ static void refresh_data(void) {
 
     pthread_mutex_lock(&st.mutex);
     // clang-format off
-    memcpy(st.models , local_models , sizeof(Model  ) * local_model_cnt  );
-    memcpy(st.running, local_running, sizeof(Running) * local_running_cnt);
+    memcpy(st.ls_models , local_ls_models, sizeof(LsModel  ) * local_ls_model_cnt  );
+    memcpy(st.ps_models, local_ps_models, sizeof(PsModel) * local_ps_model_cnt);
     // clang-format on
-    st.model_cnt    = local_model_cnt;
-    st.running_cnt  = local_running_cnt;
+    st.ls_model_cnt = local_ls_model_cnt;
+    st.ps_model_cnt = local_ps_model_cnt;
     st.col_name     = local_col_name;
     st.col_id       = local_col_id;
     st.col_size     = local_col_size;
@@ -1057,10 +1092,10 @@ static void draw_footer(void) {
     print_hint(&x, y, "[▲/▼] Nav", true);
     print_hint(&x, y, "[◀/▶] Tabs", true);
     // Tab 0 only (and requires installed models)
-    print_hint(&x, y, "[I] Info", st.tab == 0 && st.model_cnt);
-    print_hint(&x, y, "[D] Delete", st.tab == 0 && st.model_cnt);
+    print_hint(&x, y, "[I] Info", st.tab == 0 && st.ls_model_cnt);
+    print_hint(&x, y, "[D] Delete", st.tab == 0 && st.ls_model_cnt);
     // Tab 1 only (and requires running models)
-    print_hint(&x, y, "[S] Stop", st.tab == 1 && st.running_cnt);
+    print_hint(&x, y, "[S] Stop", st.tab == 1 && st.ps_model_cnt);
     // Always available
     print_hint(&x, y, "[P] Pull", true);
     print_hint(&x, y, "[R] Refresh", true);
@@ -1158,20 +1193,20 @@ static void draw_model_list(void) {
     pthread_mutex_lock(&st.mutex);
     int disp = 0, row = ylist;
 
-    for (int i = 0; i < st.model_cnt && row < rows - 9; i++) {
+    for (int i = 0; i < st.ls_model_cnt && row < rows - 9; i++) {
         int running = 0;
 
-        for (int j = 0; j < st.running_cnt; j++)
-            if (strcmp(st.models[i].name, st.running[j].name) == 0) {
+        for (int j = 0; j < st.ps_model_cnt; j++)
+            if (strcmp(st.ls_models[i].name, st.ps_models[j].name) == 0) {
                 running = 1;
                 break;
             }
 
-        if (strlen(st.filter) && !_strcasestr(st.models[i].name, st.filter)) {
+        if (strlen(st.filter) && !_strcasestr(st.ls_models[i].name, st.filter)) {
             continue;
         }
 
-        if (disp == st.sel_model && st.tab == 0) {
+        if (disp == st.sel_ls_model && st.tab == 0) {
             attron(COLOR_PAIR(CP_SELECTED));
         } else if (running) {
             attron(COLOR_PAIR(CP_RUNNING));
@@ -1180,12 +1215,12 @@ static void draw_model_list(void) {
         }
 
         char disp_name[MAX_NAME_LEN + 3];
-        snprintf(disp_name, sizeof(disp_name), "%s%s", running ? "* " : "  ", st.models[i].name);
+        snprintf(disp_name, sizeof(disp_name), "%s%s", running ? "* " : "  ", st.ls_models[i].name);
         // clang-format off
         mvprintw(row, x_name, "%-*.*s", st.col_name - 1, st.col_name - 1, disp_name        );
-        mvprintw(row, x_id  , "%-*.*s", st.col_id   - 1, st.col_id   - 1, st.models[i].id  );
-        mvprintw(row, x_size, "%-*.*s", st.col_size - 1, st.col_size - 1, st.models[i].size);
-        mvprintw(row, x_date, "%-*.*s", st.col_date - 1, st.col_date - 1, st.models[i].date);
+        mvprintw(row, x_id  , "%-*.*s", st.col_id   - 1, st.col_id   - 1, st.ls_models[i].id  );
+        mvprintw(row, x_size, "%-*.*s", st.col_size - 1, st.col_size - 1, st.ls_models[i].size);
+        mvprintw(row, x_date, "%-*.*s", st.col_date - 1, st.col_date - 1, st.ls_models[i].date);
         // clang-format on
         attroff(COLOR_PAIR(CP_SELECTED) | COLOR_PAIR(CP_RUNNING) | COLOR_PAIR(CP_DEFAULT));
 
@@ -1244,24 +1279,24 @@ static void draw_running_list(void) {
     pthread_mutex_lock(&st.mutex);
     int row = ylist;
 
-    for (int i = 0; i < st.running_cnt && row < rows - 9; i++) {
-        if (i == st.sel_running && st.tab == 1) {
+    for (int i = 0; i < st.ps_model_cnt && row < rows - 9; i++) {
+        if (i == st.sel_ps_model && st.tab == 1) {
             attron(COLOR_PAIR(CP_SELECTED));
         } else {
             attron(COLOR_PAIR(CP_DEFAULT));
         }
         // clang-format off
-        mvprintw(row, x_name, "%-*.*s", st.rcol_name - 1, st.rcol_name - 1, st.running[i].name   );
-        mvprintw(row, x_id  , "%-*.*s", st.rcol_id   - 1, st.rcol_id   - 1, st.running[i].id     );
-        mvprintw(row, x_size, "%-*.*s", st.rcol_size - 1, st.rcol_size - 1, st.running[i].size   );
-        mvprintw(row, x_proc, "%-*.*s", st.rcol_proc - 1, st.rcol_proc - 1, st.running[i].proc   );
-        mvprintw(row, x_ctx , "%-*.*s", st.rcol_ctx  - 1, st.rcol_ctx  - 1, st.running[i].context);
-        mvprintw(row, x_exp , "%-*.*s", st.rcol_exp  - 1, st.rcol_exp  - 1, st.running[i].expires);
+        mvprintw(row, x_name, "%-*.*s", st.rcol_name - 1, st.rcol_name - 1, st.ps_models[i].name   );
+        mvprintw(row, x_id  , "%-*.*s", st.rcol_id   - 1, st.rcol_id   - 1, st.ps_models[i].id     );
+        mvprintw(row, x_size, "%-*.*s", st.rcol_size - 1, st.rcol_size - 1, st.ps_models[i].size   );
+        mvprintw(row, x_proc, "%-*.*s", st.rcol_proc - 1, st.rcol_proc - 1, st.ps_models[i].proc   );
+        mvprintw(row, x_ctx , "%-*.*s", st.rcol_ctx  - 1, st.rcol_ctx  - 1, st.ps_models[i].context);
+        mvprintw(row, x_exp , "%-*.*s", st.rcol_exp  - 1, st.rcol_exp  - 1, st.ps_models[i].expires);
         // clang-format on
         attroff(COLOR_PAIR(CP_SELECTED) | COLOR_PAIR(CP_DEFAULT));
         row++;
     }
-    if (st.running_cnt == 0) {
+    if (st.ps_model_cnt == 0) {
         attron(COLOR_PAIR(CP_WARNING));
         mvprintw(ylist, 2, "No running models.");
         attroff(COLOR_PAIR(CP_WARNING));
@@ -1723,7 +1758,7 @@ static void handle_pull_dialog_keys(void) {
 static void search_dialog_enter(void) {
     if (strlen(st.dialog_input)) {
         snprintf(st.filter, MAX_NAME_LEN, "%s", st.dialog_input);
-        st.sel_model = 0;
+        st.sel_ls_model = 0;
     } else {
         st.filter[0] = '\0';
     }
@@ -1799,10 +1834,10 @@ static int get_selected_model_name(char *out_buf) {
     int found = 0;
 
     pthread_mutex_lock(&st.mutex);
-    for (int i = 0; i < st.model_cnt; i++) {
-        if (!strlen(st.filter) || _strcasestr(st.models[i].name, st.filter)) {
-            if (vis == st.sel_model) {
-                snprintf(out_buf, MAX_NAME_LEN, "%s", st.models[i].name);
+    for (int i = 0; i < st.ls_model_cnt; i++) {
+        if (!strlen(st.filter) || _strcasestr(st.ls_models[i].name, st.filter)) {
+            if (vis == st.sel_ls_model) {
+                snprintf(out_buf, MAX_NAME_LEN, "%s", st.ls_models[i].name);
                 found = 1;
                 break;
             }
@@ -1822,8 +1857,8 @@ static int get_visible_model_count(void) {
     int vis = 0;
 
     pthread_mutex_lock(&st.mutex);
-    for (int i = 0; i < st.model_cnt; i++)
-        if (!strlen(st.filter) || _strcasestr(st.models[i].name, st.filter)) {
+    for (int i = 0; i < st.ls_model_cnt; i++)
+        if (!strlen(st.filter) || _strcasestr(st.ls_models[i].name, st.filter)) {
             vis++;
         }
     pthread_mutex_unlock(&st.mutex);
@@ -1865,7 +1900,7 @@ static void handle_main_keys(int ch) {
 
         case 'i':
         case 'I':
-            if (st.tab == 0 && st.model_cnt) {
+            if (st.tab == 0 && st.ls_model_cnt) {
                 char name_buf[MAX_NAME_LEN];
                 if (get_selected_model_name(name_buf)) {
                     show_info(name_buf);
@@ -1877,30 +1912,30 @@ static void handle_main_keys(int ch) {
             break;
 
         case KEY_UP:
-            if (st.tab == 0 && st.model_cnt) {
+            if (st.tab == 0 && st.ls_model_cnt) {
                 int vis = get_visible_model_count();
                 if (vis) {
-                    st.sel_model = (st.sel_model - 1 + vis) % vis;
+                    st.sel_ls_model = (st.sel_ls_model - 1 + vis) % vis;
                     draw_model_list();
                     refresh();
                 }
-            } else if (st.tab == 1 && st.running_cnt) {
-                st.sel_running = (st.sel_running - 1 + st.running_cnt) % st.running_cnt;
+            } else if (st.tab == 1 && st.ps_model_cnt) {
+                st.sel_ps_model = (st.sel_ps_model - 1 + st.ps_model_cnt) % st.ps_model_cnt;
                 draw_running_list();
                 refresh();
             }
             break;
 
         case KEY_DOWN:
-            if (st.tab == 0 && st.model_cnt) {
+            if (st.tab == 0 && st.ls_model_cnt) {
                 int vis = get_visible_model_count();
                 if (vis) {
-                    st.sel_model = (st.sel_model + 1) % vis;
+                    st.sel_ls_model = (st.sel_ls_model + 1) % vis;
                     draw_model_list();
                     refresh();
                 }
-            } else if (st.tab == 1 && st.running_cnt) {
-                st.sel_running = (st.sel_running + 1) % st.running_cnt;
+            } else if (st.tab == 1 && st.ps_model_cnt) {
+                st.sel_ps_model = (st.sel_ps_model + 1) % st.ps_model_cnt;
                 draw_running_list();
                 refresh();
             }
@@ -1908,23 +1943,23 @@ static void handle_main_keys(int ch) {
 
         case KEY_LEFT:
             if (st.tab == 1) {
-                st.tab       = 0;
-                st.sel_model = 0;
+                st.tab          = 0;
+                st.sel_ls_model = 0;
                 full_refresh();
             }
             break;
 
         case KEY_RIGHT:
             if (st.tab == 0) {
-                st.tab         = 1;
-                st.sel_running = 0;
+                st.tab          = 1;
+                st.sel_ps_model = 0;
                 full_refresh();
             }
             break;
 
         case 'd':
         case 'D':
-            if (st.tab == 0 && st.model_cnt) {
+            if (st.tab == 0 && st.ls_model_cnt) {
                 char name_buf[MAX_NAME_LEN];
                 if (get_selected_model_name(name_buf)) {
                     // clang-format off
@@ -1942,13 +1977,13 @@ static void handle_main_keys(int ch) {
 
         case 's':
         case 'S':
-            if (st.tab == 1 && st.running_cnt) {
+            if (st.tab == 1 && st.ps_model_cnt) {
                 /* Copy name under lock */
                 char name_buf[MAX_NAME_LEN];
 
                 pthread_mutex_lock(&st.mutex);
-                if (st.sel_running < st.running_cnt) {
-                    snprintf(name_buf, MAX_NAME_LEN, "%s", st.running[st.sel_running].name);
+                if (st.sel_ps_model < st.ps_model_cnt) {
+                    snprintf(name_buf, MAX_NAME_LEN, "%s", st.ps_models[st.sel_ps_model].name);
                 } else {
                     name_buf[0] = '\0';
                 }
@@ -2020,7 +2055,7 @@ static int initialize_app(void) {
 
     refresh_data();
     snprintf(st.status, sizeof(st.status), "Refreshed");
-    snprintf(st.logmsg, sizeof(st.logmsg), "Loaded %d model(s), %d running", st.model_cnt, st.running_cnt);
+    snprintf(st.logmsg, sizeof(st.logmsg), "Loaded %d model(s), %d running", st.ls_model_cnt, st.ps_model_cnt);
     full_refresh();
 
     return 0;
@@ -2048,7 +2083,7 @@ int main(void) {
             pthread_mutex_unlock(&st.mutex);
 
             snprintf(st.status, sizeof(st.status), "Refreshed");
-            snprintf(st.logmsg, sizeof(st.logmsg), "Loaded %d model(s), %d running", st.model_cnt, st.running_cnt);
+            snprintf(st.logmsg, sizeof(st.logmsg), "Loaded %d model(s), %d running", st.ls_model_cnt, st.ps_model_cnt);
             full_refresh();
         }
 
