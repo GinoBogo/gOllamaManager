@@ -18,13 +18,14 @@
 /* ************************************************************************** */
 
 #define _XOPEN_SOURCE 600 // POSIX.1-2001 (or use 700 for newer)
-
+//
 #include <ctype.h>   // isprint, tolower
 #include <locale.h>  // LC_ALL, setlocale
 #include <ncurses.h> // ACS_HLINE, ACS_LLCORNER, ACS_LRCORNER, ACS_LTEE, ACS_RTEE ...
 #include <pthread.h> // pthread_create, pthread_detach, pthread_mutex_destroy, ...
 #include <stdarg.h>  // va_list, va_start, va_end
 #include <stdbool.h> // bool, false, true
+#include <stdint.h>  // uint8_t, uint32_t
 #include <stdio.h>   // FILE, fflush, fgets, fprintf, getchar, ...
 #include <stdlib.h>  // WEXITSTATUS, WIFEXITED, exit, getenv, mbstowcs, system
 #include <string.h>  // memcpy, memset, strcmp, strlen, strtok, ...
@@ -52,7 +53,16 @@
 // Defines
 // -----------------------------------------------------------------------------
 
-#define UNUSED_FUNC __attribute__((__unused__)) // Unused function
+#define UNUSED_FUNC __attribute__((__unused__)) // "unused function" warning remover
+
+#if defined(__GNUC__) && !defined(__clang__)
+#define OPTIMIZE_FUNC(level) __attribute__((optimize(level)))
+#else
+#define OPTIMIZE_FUNC(level)
+#endif
+
+#define OPTIMIZE_O2 OPTIMIZE_FUNC(2)
+#define OPTIMIZE_O3 OPTIMIZE_FUNC(3)
 
 // -----------------------------------------------------------------------------
 // ncurses Color Pairs
@@ -155,7 +165,45 @@ static void clear_term(void) {
 }
 
 /**
- * @brief Case‑insensitive substring search (portable replacement for
+ * @brief Case-insensitive string comparison for a specified number of
+ * characters.
+ *
+ * @param[in] s1 First string to compare.
+ * @param[in] s2 Second string to compare.
+ * @param[in] n Maximum number of characters to compare.
+ * @return int Zero if the strings are equal, negative if s1 is less than s2,
+ * positive if s1 is greater than s2.
+ */
+OPTIMIZE_O3
+static int _strncasecmp(const char *s1, //
+                        const char *s2,
+                        size_t      n) {
+    for (size_t i = 0; i < n; ++i) {
+        uint8_t c1 = (uint8_t)s1[i];
+        uint8_t c2 = (uint8_t)s2[i];
+
+        if (c1 == '\0' && c2 == '\0') {
+            return 0;
+        }
+        if (c1 == '\0') {
+            return -1;
+        }
+        if (c2 == '\0') {
+            return 1;
+        }
+
+        int u1 = tolower(c1);
+        int u2 = tolower(c2);
+
+        if (u1 != u2) {
+            return u1 - u2;
+        }
+    }
+    return 0;
+}
+
+/**
+ * @brief Case-insensitive substring search (portable replacement for
  * strcasestr).
  *
  * @param[in] haystack String to search in.
@@ -163,6 +211,7 @@ static void clear_term(void) {
  * @return Pointer to the first occurrence of needle within haystack, or NULL if
  * not found.
  */
+OPTIMIZE_O3
 static char *_strcasestr(const char *haystack, //
                          const char *needle) {
     // Handle NULL pointers
@@ -171,27 +220,21 @@ static char *_strcasestr(const char *haystack, //
     }
 
     // Empty needle matches at start (POSIX behavior)
-    if (!*needle) {
+    if (*needle == '\0') {
         return (char *)haystack;
     }
 
     size_t n_len = strlen(needle);
+    size_t h_len = strlen(haystack);
 
-    for (const char *p = haystack; *p; ++p) {
-        size_t i;
+    // Check if the needle is longer than the haystack
+    if (n_len > h_len) {
+        return NULL;
+    }
 
-        for (i = 0; i < n_len && p[i]; ++i) {
-            unsigned char h_char = (unsigned char)p[i];
-            unsigned char n_char = (unsigned char)needle[i];
-
-            if (tolower(h_char) != tolower(n_char)) {
-                break; // Mismatch
-            }
-        }
-
-        // Success only if ALL needle characters matched
-        if (i == n_len) {
-            return (char *)p;
+    for (size_t i = 0; i <= h_len - n_len; ++i) {
+        if (_strncasecmp(&haystack[i], needle, n_len) == 0) {
+            return (char *)&haystack[i];
         }
     }
     return NULL;
@@ -1236,9 +1279,11 @@ static void draw_log(void) {
     int y = rows - 3;
 
     attron(COLOR_PAIR(CP_BORDER));
-    mvhline(y, 0, ACS_HLINE, cols);
-    mvaddch(y, 0, ACS_LTEE);
+    // clang-format off
+    mvhline(y, 0       , ACS_HLINE, cols);
+    mvaddch(y, 0       , ACS_LTEE);
     mvaddch(y, cols - 1, ACS_RTEE);
+    // clang-format on
     attroff(COLOR_PAIR(CP_BORDER));
 
     attron(COLOR_PAIR(CP_ACCENT));
@@ -1781,8 +1826,9 @@ static int get_visible_model_count(void) {
 
     pthread_mutex_lock(&st.mutex);
     for (int i = 0; i < st.model_cnt; i++)
-        if (!strlen(st.filter) || _strcasestr(st.models[i].name, st.filter))
+        if (!strlen(st.filter) || _strcasestr(st.models[i].name, st.filter)) {
             vis++;
+        }
     pthread_mutex_unlock(&st.mutex);
     return vis;
 }

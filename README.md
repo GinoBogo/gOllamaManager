@@ -86,21 +86,25 @@ gollama_manager
 ## Key Bindings
 
 ### Navigation
+
 - **UP/DOWN** - Navigate through the model list
 - **LEFT/RIGHT** - Switch between "Installed Models" and "Running Models" tabs
 
 ### Model Operations
+
 - **I** - Show detailed information about the selected model
 - **D** - Delete the selected model (with confirmation)
 - **S** - Stop the selected running model (with confirmation)
 - **P** - Pull a new model (opens input dialog)
 
 ### Other
+
 - **R** - Refresh model data
 - **/** - Open search dialog to filter models
 - **Q** - Quit the application
 
 ### Dialog Controls
+
 - **ENTER** - Confirm action / submit input
 - **ESC** - Cancel dialog
 - **TAB** - Toggle between OK/Cancel in confirmation dialogs
@@ -158,13 +162,17 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 ## Troubleshooting
 
 ### Ollama not found
+
 Ensure Ollama is installed and available in your PATH:
+
 ```bash
 ollama --version
 ```
 
 ### ncursesw not found
+
 Install ncursesw development library (wide-character version for UTF-8 support):
+
 ```bash
 # Arch Linux
 sudo pacman -S ncursesw
@@ -177,7 +185,9 @@ sudo dnf install ncurses-devel
 ```
 
 ### Build errors
+
 Ensure you have GCC and CMake installed:
+
 ```bash
 gcc --version
 cmake --version
