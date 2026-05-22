@@ -964,6 +964,7 @@ static void init_ncurses(void) {
     cbreak();
     noecho();
     keypad(stdscr, TRUE);
+    set_escdelay(100);
     timeout(100);
     curs_set(0);
 
