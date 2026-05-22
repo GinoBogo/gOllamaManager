@@ -185,15 +185,12 @@ static int _strncasecmp(const char *s1, //
         if (c1 == '\0' && c2 == '\0') {
             return 0;
         }
-        if (c1 == '\0') {
-            return -1;
-        }
-        if (c2 == '\0') {
-            return 1;
+        if (c1 == '\0' || c2 == '\0') {
+            return c1 - c2;
         }
 
-        int u1 = tolower(c1);
-        int u2 = tolower(c2);
+        uint8_t u1 = tolower(c1);
+        uint8_t u2 = tolower(c2);
 
         if (u1 != u2) {
             return u1 - u2;
