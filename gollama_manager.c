@@ -46,7 +46,7 @@
 #define MAX_LINE_LEN    1024
 #define MAX_LOG_LEN     512
 #define MIN_COL_PAD     2
-#define MAX_COL_WIDTH   40
+#define MAX_COL_WIDTH   64
 #define MAX_CMD_OUT     32768
 
 // -----------------------------------------------------------------------------
