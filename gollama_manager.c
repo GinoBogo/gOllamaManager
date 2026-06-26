@@ -577,6 +577,7 @@ static void parse_ls_into(const char *out, //
 
         /* Ollama list v0.23.0 layout:
            [0]NAME [1]ID [2]SIZE_VAL [3]SIZE_UNIT [4+]MODIFIED_DATE
+           For cloud models: [0]NAME [1]ID [2]"-" [3]MODIFIED_DATE_FIRST_TOKEN ...
         */
         if (n < 4) {
             line = strtok(NULL, "\n\r");
@@ -589,14 +590,23 @@ static void parse_ls_into(const char *out, //
         // 2. ID
         snprintf(dest[c].id, MAX_ID_LEN, "%s", tok[1]);
 
-        // 3. SIZE (always 2 tokens, e.g., "4.5 GB")
-        snprintf(dest[c].size, MAX_SIZE_LEN, "%s %s", tok[2], tok[3]);
+        // 3. SIZE - Handle cloud models with "-" size
+        if (strcmp(tok[2], "-") == 0) {
+            // Cloud model case: SIZE is just "-"
+            snprintf(dest[c].size, MAX_SIZE_LEN, "%s", tok[2]);
+        } else {
+            // Regular model case: SIZE is "VALUE UNIT" (e.g., "4.5 GB")
+            snprintf(dest[c].size, MAX_SIZE_LEN, "%s %s", tok[2], tok[3]);
+        }
 
-        // 4. MODIFIED DATE (all remaining tokens from index 4)
+        // 4. MODIFIED DATE (remaining tokens)
         char date_buf[MAX_DATE_LEN] = "";
         int  off                    = 0;
-        for (int i = 4; i < n; i++) {
-            if (i > 4) {
+        // Start from index 3 for cloud models (where date starts),
+        // or index 4 for regular models
+        int start_index = (strcmp(tok[2], "-") == 0) ? 3 : 4;
+        for (int i = start_index; i < n; i++) {
+            if (i > start_index) {
                 off += snprintf(date_buf + off, MAX_DATE_LEN - off, " ");
             }
             off += snprintf(date_buf + off, MAX_DATE_LEN - off, "%s", tok[i]);
