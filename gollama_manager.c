@@ -63,6 +63,7 @@
 
 #define OPTIMIZE_O2 OPTIMIZE_FUNC(2)
 #define OPTIMIZE_O3 OPTIMIZE_FUNC(3)
+#define APP_VERSION "1.0.0"
 
 // -----------------------------------------------------------------------------
 // ncurses Color Pairs
@@ -1065,7 +1066,7 @@ static void draw_header(void) {
         // Clear row 0 and row 3 with spaces
         mvhline(0, 0, ' ', cols);
         mvhline(3, 0, ' ', cols);
-        mvprintw(1, 2, " OLLAMA MODEL MANAGER ");
+        mvprintw(1, 2, " OLLAMA MODEL MANAGER v%s ", APP_VERSION);
         attroff(A_BOLD);
 
         if (strlen(st.status)) {
