@@ -2152,8 +2152,6 @@ static int initialize_app(void) {
     pthread_mutex_init(&st.mutex, NULL);
     init_ncurses();
 
-    fetch_username();
-
     refresh_data();
     snprintf(st.status, sizeof(st.status), "Refreshed");
     snprintf(st.logmsg, sizeof(st.logmsg), "Loaded %d model(s), %d running", st.ls_model_cnt, st.ps_model_cnt);
