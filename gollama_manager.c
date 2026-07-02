@@ -1035,7 +1035,7 @@ static inline void cleanup(void) {
 }
 
 // -----------------------------------------------------------------------------
-// UI Drawing – Box, Header, Footer, Tabs, Lists, Log, Dialogs
+// UI Drawing – Box, Header, Hints Bar, Tabs, Lists, Log, Dialogs
 // -----------------------------------------------------------------------------
 
 /**
@@ -1114,9 +1114,9 @@ static void draw_header(void) {
 }
 
 /**
- * @brief Draw the footer with navigation and command hints.
+ * @brief Draw the hints bar with navigation and command hints.
  */
-static void draw_footer(void) {
+static void draw_hints_bar(void) {
     int x = 2;
     int y = rows - 4;
 
@@ -1127,6 +1127,9 @@ static void draw_footer(void) {
     attroff(COLOR_PAIR(CP_BORDER));
 
     y += 1;
+    // Clear the hint line to avoid artifacts when text length changes
+    move(y, 0);
+    clrtoeol();
     // Always available
     print_hint(&x, y, "[▲/▼] Nav", true);
     print_hint(&x, y, "[◀/▶] Tabs", true);
@@ -1139,6 +1142,8 @@ static void draw_footer(void) {
     print_hint(&x, y, "[P] Pull", true);
     print_hint(&x, y, "[R] Refresh", true);
     print_hint(&x, y, "[/] Search", true);
+    // Login/Logout
+    print_hint(&x, y, st.username[0] ? "[L] Logout" : "[L] Login", true);
     print_hint(&x, y, "[Q] Quit", true);
 
     if (st.pulling) {
@@ -1344,9 +1349,9 @@ static void draw_running_list(void) {
 }
 
 /**
- * @brief Draw the log area at the bottom of the screen.
+ * @brief Draw the status bar (log area) at the bottom of the screen.
  */
-static void draw_log(void) {
+static void draw_status_bar(void) {
     int y = rows - 2;
 
     attron(COLOR_PAIR(CP_BORDER));
@@ -1570,8 +1575,8 @@ static void full_refresh(void) {
     werase(stdscr); // clear logical screen only
     draw_header();
     draw_content();
-    draw_log();
-    draw_footer();
+    draw_hints_bar();
+    draw_status_bar();
     wnoutrefresh(stdscr); // queue updates
     doupdate();           // apply all updates at once
 }
@@ -1588,7 +1593,7 @@ static void log_msg(const char *fmt, ...) {
     vsnprintf(st.logmsg, sizeof(st.logmsg), fmt, ap);
     va_end(ap);
 
-    draw_log();
+    draw_status_bar();
     refresh(); // immediate refresh for log messages
 }
 
@@ -2075,6 +2080,37 @@ static void handle_main_keys(int ch) {
             draw_pull_dialog();
             refresh();
             break;
+
+        case 'l':
+        case 'L': {
+            char out[512];
+            if (st.username[0]) {
+                // Logout
+                int ret = run_cmd("ollama logout 2>&1", out, sizeof(out));
+                if (ret == 0) {
+                    st.username[0] = '\0';
+                    log_msg("Logged out successfully");
+                } else {
+                    log_msg("Logout failed");
+                }
+            } else {
+                // Login
+                int ret = run_cmd("ollama login 2>&1", out, sizeof(out));
+                if (ret == 0) {
+                    fetch_username();
+                    if (st.username[0]) {
+                        log_msg("Logged in as: %s", st.username);
+                    } else {
+                        log_msg("Login completed");
+                    }
+                } else {
+                    log_msg("Login failed");
+                }
+            }
+            draw_hints_bar();
+            refresh();
+            break;
+        }
 
         case '/':
             memset(st.dialog_input, 0, sizeof(st.dialog_input));
