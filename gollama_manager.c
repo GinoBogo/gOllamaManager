@@ -1118,7 +1118,7 @@ static void draw_header(void) {
  */
 static void draw_footer(void) {
     int x = 2;
-    int y = rows - 5;
+    int y = rows - 4;
 
     attron(COLOR_PAIR(CP_BORDER));
     mvhline(y, 0, ACS_HLINE, cols);
@@ -1347,7 +1347,7 @@ static void draw_running_list(void) {
  * @brief Draw the log area at the bottom of the screen.
  */
 static void draw_log(void) {
-    int y = rows - 3;
+    int y = rows - 2;
 
     attron(COLOR_PAIR(CP_BORDER));
     // clang-format off
