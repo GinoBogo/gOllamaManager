@@ -63,7 +63,7 @@
 
 #define OPTIMIZE_O2 OPTIMIZE_FUNC(2)
 #define OPTIMIZE_O3 OPTIMIZE_FUNC(3)
-#define APP_VERSION "1.0.0"
+#define APP_VERSION "1.1"
 
 // -----------------------------------------------------------------------------
 // ncurses Color Pairs
@@ -139,6 +139,7 @@ static struct {
     int             dialog_cursor;                /**< Current cursor position in dialog_input */
     int             dialog_insert;                /**< 1 = insert mode, 0 = overwrite mode */
     char            info_out[8192];               /**< Output buffer for `ollama show` */
+    char            username[MAX_NAME_LEN];       /**< Signed-in Ollama username (from `ollama login`) */
     pthread_mutex_t mutex;                        /**< Mutex for thread-safe data access */
 
     /* Dynamic column widths for installed tab */
@@ -858,6 +859,32 @@ static void show_info(const char *name) {
     st.show_info = 1;
 }
 
+/**
+ * @brief Query `ollama login` and extract the signed-in username, if any.
+ *
+ * Handles the typical outputs of `ollama login`, e.g.:
+ *   "You are already signed in as user 'ginobogo'"
+ * Leaves st.username empty if no username could be parsed (e.g. not signed in).
+ */
+static void fetch_username(void) {
+    char out[512];
+
+    run_cmd("ollama login 2>&1", out, sizeof(out));
+
+    st.username[0] = '\0';
+
+    const char *p = strchr(out, '\'');
+    if (p) {
+        p++; /* skip opening quote */
+        const char *q = strchr(p, '\'');
+        if (q && (size_t)(q - p) < sizeof(st.username)) {
+            size_t len = (size_t)(q - p);
+            memcpy(st.username, p, len);
+            st.username[len] = '\0';
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Data Refresh (no ncurses calls – thread safe with brief lock)
 // -----------------------------------------------------------------------------
@@ -1331,11 +1358,35 @@ static void draw_log(void) {
     attroff(COLOR_PAIR(CP_BORDER));
 
     attron(COLOR_PAIR(CP_ACCENT));
-    mvprintw(y + 1, 2, "LOG:");
+    mvprintw(y + 1, 2, "Log:");
+    attroff(COLOR_PAIR(CP_ACCENT));
+
+    /* Reserve space on the right of the line for the "User:" indicator */
+    const int user_field_w = 24; /* width of the username value */
+    const int user_label_w = 6;  /* "User: " */
+
+    int user_x = cols - user_field_w - user_label_w - 2;
+    int log_w  = user_x - 7 - 2; /* remaining width for the log message */
+    if (log_w < 0) {
+        log_w = 0;
+    }
+
+    attron(COLOR_PAIR(CP_DEFAULT));
+    mvprintw(y + 1, 7, "%-*.*s", log_w, log_w, st.logmsg);
+    attroff(COLOR_PAIR(CP_DEFAULT));
+
+    attron(COLOR_PAIR(CP_ACCENT));
+    mvprintw(y + 1, user_x, "User:");
     attroff(COLOR_PAIR(CP_ACCENT));
 
     attron(COLOR_PAIR(CP_DEFAULT));
-    mvprintw(y + 1, 7, "%-*s", cols - 10, st.logmsg);
+    if (strlen(st.username)) {
+        attron(COLOR_PAIR(CP_SUCCESS));
+        mvprintw(y + 1, user_x + user_label_w, "%-*.*s", user_field_w, user_field_w, st.username);
+        attroff(COLOR_PAIR(CP_SUCCESS));
+    } else {
+        mvprintw(y + 1, user_x + user_label_w, "%-*.*s", user_field_w, user_field_w, "(not signed in)");
+    }
     attroff(COLOR_PAIR(CP_DEFAULT));
 }
 
@@ -2064,6 +2115,8 @@ static int initialize_app(void) {
     st.dialog_insert = 1; // default to insert mode
     pthread_mutex_init(&st.mutex, NULL);
     init_ncurses();
+
+    fetch_username();
 
     refresh_data();
     snprintf(st.status, sizeof(st.status), "Refreshed");
