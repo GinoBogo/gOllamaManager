@@ -63,7 +63,7 @@
 
 #define OPTIMIZE_O2 OPTIMIZE_FUNC(2)
 #define OPTIMIZE_O3 OPTIMIZE_FUNC(3)
-#define APP_VERSION "1.1"
+#define APP_VERSION "1.2"
 
 // -----------------------------------------------------------------------------
 // ncurses Color Pairs
@@ -864,9 +864,13 @@ static void show_info(const char *name) {
  *
  * Handles the typical outputs of `ollama login`, e.g.:
  *   "You are already signed in as user 'ginobogo'"
- * Leaves st.username empty if no username could be parsed (e.g. not signed in).
+ * Leaves st.username empty if no username could be parsed (e.g. not signed
+ * in, or the login could not complete because no browser is available,
+ * such as over an SSH session).
+ *
+ * @return true if a username was parsed, false otherwise.
  */
-static void fetch_username(void) {
+static bool fetch_username(void) {
     char out[512];
 
     run_cmd("ollama login 2>&1", out, sizeof(out));
@@ -883,6 +887,12 @@ static void fetch_username(void) {
             st.username[len] = '\0';
         }
     }
+
+    if (!st.username[0]) {
+        return false;
+    }
+
+    return true;
 }
 
 // -----------------------------------------------------------------------------
@@ -2097,14 +2107,15 @@ static void handle_main_keys(int ch) {
                 // Login
                 int ret = run_cmd("ollama login 2>&1", out, sizeof(out));
                 if (ret == 0) {
-                    fetch_username();
-                    if (st.username[0]) {
+                    if (fetch_username()) {
                         log_msg("Logged in as: %s", st.username);
+                    } else if (strstr(out, "no method available for opening") || strstr(out, "xdg-open")) {
+                        log_msg("Login needs a browser - not available over SSH");
                     } else {
                         log_msg("Login completed");
                     }
                 } else {
-                    log_msg("Login failed");
+                    log_msg("Login failed - run 'ollama login' in a terminal");
                 }
             }
             draw_hints_bar();
