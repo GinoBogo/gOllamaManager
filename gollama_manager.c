@@ -29,6 +29,7 @@
 #include <stdio.h>   // FILE, fflush, fgets, fprintf, getchar, ...
 #include <stdlib.h>  // WEXITSTATUS, WIFEXITED, exit, getenv, mbstowcs, system
 #include <string.h>  // memcpy, memset, strcmp, strlen, strtok, ...
+#include <strings.h> // strcasecmp
 #include <unistd.h>  // NULL, chdir, getcwd
 #include <wchar.h>   // wchar_t, wcswidth
 
@@ -63,10 +64,10 @@
 
 #define OPTIMIZE_O2 OPTIMIZE_FUNC(2)
 #define OPTIMIZE_O3 OPTIMIZE_FUNC(3)
-#define APP_VERSION "1.2"
+#define APP_VERSION "1.3"
 
 // -----------------------------------------------------------------------------
-// ncurses Color Pairs
+// `ncurses` Color Pairs
 // -----------------------------------------------------------------------------
 
 enum {
@@ -146,6 +147,10 @@ static struct {
     int col_name, col_id, col_size, col_date;
     /* Dynamic column widths for running tab */
     int rcol_name, rcol_id, rcol_size, rcol_proc, rcol_ctx, rcol_exp;
+
+    /* Scroll offsets for long lists */
+    int ls_scroll_offset; /**< Scroll offset for installed list */
+    int ps_scroll_offset; /**< Scroll offset for running list */
 } st;
 
 /**< Current terminal dimensions */
@@ -511,6 +516,23 @@ static int run_cmd(const char *cmd, //
 }
 
 /**
+ * @brief Check if a string is a recognized binary size unit.
+ *
+ * @param[in] s String to test.
+ * @return true if s is a known unit (B, KB, MB, GB, TB).
+ */
+static bool is_size_unit(const char *s) {
+    if (!s)
+        return false;
+    static const char *units[] = {"B", "KB", "MB", "GB", "TB", NULL};
+    for (int i = 0; units[i]; i++) {
+        if (strcasecmp(s, units[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
+/**
  * @brief Prints a styled hint at position (x,y) that may adjust the cursor
  * position based on the text length. The hint is displayed with either normal
  * or dimmed styling depending on the 'active' flag.
@@ -577,9 +599,15 @@ static void parse_ls_into(const char *out, //
             p        = strtok_r(NULL, " \t\r", &save);
         }
 
-        /* Ollama list v0.23.0 layout:
-           [0]NAME [1]ID [2]SIZE_VAL [3]SIZE_UNIT [4+]MODIFIED_DATE
-           For cloud models: [0]NAME [1]ID [2]"-" [3]MODIFIED_DATE_FIRST_TOKEN ...
+        /* Ollama list v0.31.1
+        Cloud models layout:
+            [0]NAME [1]ID [2]"-" [3]MODIFIED_DATE_FIRST_TOKEN ...
+
+        Two-token sizes:
+            [0]NAME [1]ID [2]SIZE_VAL [3]SIZE_UNIT [4+]MODIFIED_DATE
+
+        Single-token sizes:
+            [0]NAME [1]ID [2]SIZE [3+]MODIFIED_DATE
         */
         if (n < 4) {
             line = strtok(NULL, "\n\r");
@@ -592,21 +620,24 @@ static void parse_ls_into(const char *out, //
         // 2. ID
         snprintf(dest[c].id, MAX_ID_LEN, "%s", tok[1]);
 
-        // 3. SIZE - Handle cloud models with "-" size
+        // 3. SIZE - Handle cloud models, two-token sizes, and single-token sizes
+        int start_index = 3;
         if (strcmp(tok[2], "-") == 0) {
             // Cloud model case: SIZE is just "-"
             snprintf(dest[c].size, MAX_SIZE_LEN, "%s", tok[2]);
-        } else {
+        } else if (n >= 5 && is_size_unit(tok[3])) {
             // Regular model case: SIZE is "VALUE UNIT" (e.g., "4.5 GB")
             snprintf(dest[c].size, MAX_SIZE_LEN, "%s %s", tok[2], tok[3]);
+            start_index = 4;
+        } else {
+            // Single-token size (e.g., "4.5GB") or unknown format
+            snprintf(dest[c].size, MAX_SIZE_LEN, "%s", tok[2]);
         }
 
         // 4. MODIFIED DATE (remaining tokens)
         char date_buf[MAX_DATE_LEN] = "";
-        int  off                    = 0;
-        // Start from index 3 for cloud models (where date starts),
-        // or index 4 for regular models
-        int start_index = (strcmp(tok[2], "-") == 0) ? 3 : 4;
+
+        int off = 0;
         for (int i = start_index; i < n; i++) {
             if (i > start_index) {
                 off += snprintf(date_buf + off, MAX_DATE_LEN - off, " ");
@@ -658,7 +689,7 @@ static void parse_ps_into(const char *out, //
             p        = strtok_r(NULL, " \t\r", &save);
         }
 
-        /* Ollama ps v0.23.0 layout:
+        /* Ollama ps v0.31.1 layout:
            [0]NAME [1]ID [2]SIZE_VAL [3]SIZE_UNIT [4]LOAD(%) [5]PROC_TYPE [6]CONTEXT [7+]EXPIRES
         */
         if (n < 7) {
@@ -672,8 +703,12 @@ static void parse_ps_into(const char *out, //
         // 2. ID
         snprintf(dest[c].id, MAX_ID_LEN, "%s", tok[1]);
 
-        // 3. SIZE (always 2 tokens)
-        snprintf(dest[c].size, MAX_SIZE_LEN, "%s %s", tok[2], tok[3]);
+        // 3. SIZE - robust against format changes
+        if (is_size_unit(tok[3])) {
+            snprintf(dest[c].size, MAX_SIZE_LEN, "%s %s", tok[2], tok[3]);
+        } else {
+            snprintf(dest[c].size, MAX_SIZE_LEN, "%s", tok[2]);
+        }
 
         // 4. PROCESSOR (load % + type, e.g., "100% CPU")
         snprintf(dest[c].proc, MAX_PROC_LEN, "%s %s", tok[4], tok[5]);
@@ -683,7 +718,8 @@ static void parse_ps_into(const char *out, //
 
         // 6. EXPIRES (all remaining tokens)
         char exp_buf[MAX_DATE_LEN] = "";
-        int  off                   = 0;
+
+        int off = 0;
         for (int i = 7; i < n; i++) {
             if (i > 7) {
                 off += snprintf(exp_buf + off, MAX_DATE_LEN - off, " ");
@@ -979,10 +1015,10 @@ static void refresh_data(void) {
                         &local_rcol_exp);
 
     pthread_mutex_lock(&st.mutex);
-    // clang-format off
-    memcpy(st.ls_models , local_ls_models, sizeof(LsModel  ) * local_ls_model_cnt  );
+
+    memcpy(st.ls_models, local_ls_models, sizeof(LsModel) * local_ls_model_cnt);
     memcpy(st.ps_models, local_ps_models, sizeof(PsModel) * local_ps_model_cnt);
-    // clang-format on
+
     st.ls_model_cnt = local_ls_model_cnt;
     st.ps_model_cnt = local_ps_model_cnt;
     st.col_name     = local_col_name;
@@ -997,11 +1033,20 @@ static void refresh_data(void) {
     st.rcol_exp     = local_rcol_exp;
     st.need_refresh = 1; /* signal main loop to redraw */
     st.refreshing   = 0; /* refresh thread finished */
+
+    /* Defensive: clamp scroll offsets after data changes */
+    if (st.ls_scroll_offset >= st.ls_model_cnt) {
+        st.ls_scroll_offset = (st.ls_model_cnt > 0) ? st.ls_model_cnt - 1 : 0;
+    }
+    if (st.ps_scroll_offset >= st.ps_model_cnt) {
+        st.ps_scroll_offset = (st.ps_model_cnt > 0) ? st.ps_model_cnt - 1 : 0;
+    }
+
     pthread_mutex_unlock(&st.mutex);
 }
 
 // -----------------------------------------------------------------------------
-// ncurses Initialization & Cleanup
+// `ncurses` Initialization & Cleanup
 // -----------------------------------------------------------------------------
 
 /**
@@ -1211,16 +1256,18 @@ static void draw_search(void) {
 }
 
 /**
- * @brief Draw the list of installed models with dynamic columns.
+ * @brief Draw the list of installed models with dynamic columns and scrolling.
  */
 static void draw_model_list(void) {
     int yh      = 7;
     int ylist   = yh + 2;
     int maxrows = rows - yh - 11;
-    int x_name  = 2;
-    int x_id    = x_name + st.col_name;
-    int x_size  = x_id + st.col_id;
-    int x_date  = x_size + st.col_size;
+    if (maxrows < 1)
+        maxrows = 1;
+    int x_name = 2;
+    int x_id   = x_name + st.col_name;
+    int x_size = x_id + st.col_id;
+    int x_date = x_size + st.col_size;
 
     for (int i = yh; i <= ylist + maxrows; i++) {
         move(i, 2);
@@ -1240,11 +1287,50 @@ static void draw_model_list(void) {
     mvhline(yh + 1, 2, ACS_HLINE, cols - 4);
     attroff(COLOR_PAIR(CP_BORDER));
 
-    for (int i = 0; i < maxrows; i++) {
-        mvprintw(ylist + i, 2, "%*s", cols - 4, "");
-    }
+    for (int i = 0; i < maxrows; i++) mvprintw(ylist + i, 2, "%*s", cols - 4, "");
 
     pthread_mutex_lock(&st.mutex);
+
+    // Count visible (filtered) models
+    int visible_count = 0;
+    for (int i = 0; i < st.ls_model_cnt; i++) {
+        if (!strlen(st.filter) || _strcasestr(st.ls_models[i].name, st.filter))
+            visible_count++;
+    }
+
+    // Clamp selection to valid range
+    if (st.sel_ls_model >= visible_count)
+        st.sel_ls_model = visible_count ? visible_count - 1 : 0;
+    if (st.sel_ls_model < 0)
+        st.sel_ls_model = 0;
+
+    // Adjust scroll offset to keep selection visible
+    if (st.sel_ls_model < st.ls_scroll_offset) {
+        st.ls_scroll_offset = st.sel_ls_model;
+    } else if (st.sel_ls_model >= st.ls_scroll_offset + maxrows) {
+        st.ls_scroll_offset = st.sel_ls_model - maxrows + 1;
+    }
+    if (st.ls_scroll_offset < 0)
+        st.ls_scroll_offset = 0;
+    if (visible_count > maxrows && st.ls_scroll_offset > visible_count - maxrows) {
+        st.ls_scroll_offset = visible_count - maxrows;
+    }
+    if (visible_count <= maxrows) {
+        st.ls_scroll_offset = 0;
+    }
+
+    // Scroll indicators
+    if (st.ls_scroll_offset > 0) {
+        attron(COLOR_PAIR(CP_ACCENT));
+        mvprintw(yh + 1, cols - 4, " ▲");
+        attroff(COLOR_PAIR(CP_ACCENT));
+    }
+    if (st.ls_scroll_offset + maxrows < visible_count) {
+        attron(COLOR_PAIR(CP_ACCENT));
+        mvprintw(ylist + maxrows, cols - 4, " ▼");
+        attroff(COLOR_PAIR(CP_ACCENT));
+    }
+
     int disp = 0, row = ylist;
 
     for (int i = 0; i < st.ls_model_cnt && row < rows - 9; i++) {
@@ -1259,6 +1345,16 @@ static void draw_model_list(void) {
         if (strlen(st.filter) && !_strcasestr(st.ls_models[i].name, st.filter)) {
             continue;
         }
+
+        // Skip items above the scroll window
+        if (disp < st.ls_scroll_offset) {
+            disp++;
+            continue;
+        }
+
+        // Stop if we've filled the visible window
+        if (row >= ylist + maxrows)
+            break;
 
         if (disp == st.sel_ls_model && st.tab == 0) {
             attron(COLOR_PAIR(CP_SELECTED));
@@ -1295,18 +1391,20 @@ static void draw_model_list(void) {
 }
 
 /**
- * @brief Draw the list of running models with dynamic columns.
+ * @brief Draw the list of running models with dynamic columns and scrolling.
  */
 static void draw_running_list(void) {
     int yh      = 7;
     int ylist   = yh + 2;
     int maxrows = rows - yh - 11;
-    int x_name  = 2;
-    int x_id    = x_name + st.rcol_name;
-    int x_size  = x_id + st.rcol_id;
-    int x_proc  = x_size + st.rcol_size;
-    int x_ctx   = x_proc + st.rcol_proc;
-    int x_exp   = x_ctx + st.rcol_ctx;
+    if (maxrows < 1)
+        maxrows = 1;
+    int x_name = 2;
+    int x_id   = x_name + st.rcol_name;
+    int x_size = x_id + st.rcol_id;
+    int x_proc = x_size + st.rcol_size;
+    int x_ctx  = x_proc + st.rcol_proc;
+    int x_exp  = x_ctx + st.rcol_ctx;
 
     for (int i = yh; i <= ylist + maxrows; i++) {
         move(i, 2);
@@ -1331,9 +1429,48 @@ static void draw_running_list(void) {
     for (int i = 0; i < maxrows; i++) mvprintw(ylist + i, 2, "%*s", cols - 4, "");
 
     pthread_mutex_lock(&st.mutex);
+
+    // Clamp selection to valid range
+    if (st.sel_ps_model >= st.ps_model_cnt)
+        st.sel_ps_model = st.ps_model_cnt ? st.ps_model_cnt - 1 : 0;
+    if (st.sel_ps_model < 0)
+        st.sel_ps_model = 0;
+
+    // Adjust scroll offset to keep selection visible
+    if (st.sel_ps_model < st.ps_scroll_offset) {
+        st.ps_scroll_offset = st.sel_ps_model;
+    } else if (st.sel_ps_model >= st.ps_scroll_offset + maxrows) {
+        st.ps_scroll_offset = st.sel_ps_model - maxrows + 1;
+    }
+    if (st.ps_scroll_offset < 0)
+        st.ps_scroll_offset = 0;
+    if (st.ps_model_cnt > maxrows && st.ps_scroll_offset > st.ps_model_cnt - maxrows) {
+        st.ps_scroll_offset = st.ps_model_cnt - maxrows;
+    }
+    if (st.ps_model_cnt <= maxrows) {
+        st.ps_scroll_offset = 0;
+    }
+
+    // Scroll indicators
+    if (st.ps_scroll_offset > 0) {
+        attron(COLOR_PAIR(CP_ACCENT));
+        mvprintw(yh + 1, cols - 4, " ▲");
+        attroff(COLOR_PAIR(CP_ACCENT));
+    }
+    if (st.ps_scroll_offset + maxrows < st.ps_model_cnt) {
+        attron(COLOR_PAIR(CP_ACCENT));
+        mvprintw(ylist + maxrows, cols - 4, " ▼");
+        attroff(COLOR_PAIR(CP_ACCENT));
+    }
+
     int row = ylist;
 
     for (int i = 0; i < st.ps_model_cnt && row < rows - 9; i++) {
+        if (i < st.ps_scroll_offset)
+            continue;
+        if (row >= ylist + maxrows)
+            break;
+
         if (i == st.sel_ps_model && st.tab == 1) {
             attron(COLOR_PAIR(CP_SELECTED));
         } else {
@@ -1442,16 +1579,17 @@ static void draw_info_dialog(void) {
     draw_dialog_box(w, h, sy, sx, "MODEL INFORMATION");
 
     attron(COLOR_PAIR(CP_INFO_TEXT) | A_BOLD);
-    int   row  = sy + 2;
-    char *line = strtok(st.info_out, "\n");
+    int   row     = sy + 2;
+    char *saveptr = NULL;
+    char *line    = strtok_r(st.info_out, "\n", &saveptr);
     while (line && row < sy + h - 2) {
-        char disp[w - 4];
-        char sanitized[w - 4];
-        snprintf(disp, sizeof(disp), "%s", line);
+        char disp[256];
+        char sanitized[256];
+        snprintf(disp, w - 4, "%s", line);
         sanitize_fullwidth(sanitized, disp, sizeof(sanitized));
         mvprintw(row, sx + 2, "%s", sanitized);
         row++;
-        line = strtok(NULL, "\n");
+        line = strtok_r(NULL, "\n", &saveptr);
     }
     attroff(COLOR_PAIR(CP_INFO_TEXT) | A_BOLD);
 
@@ -1539,7 +1677,9 @@ static void draw_confirm_dialog(void) {
     int msg_len  = strlen(st.confirm_msg);
     int msg_xpad = 2;
 
-    int w  = msg_xpad + (1 + msg_len + 1) + msg_xpad;
+    int w = msg_xpad + (1 + msg_len + 1) + msg_xpad;
+    if (w < 28)
+        w = 28; /* Ensure minimum width for OK/Cancel buttons */
     int h  = 6;
     int sy = (rows - h) / 2;
     int sx = (cols - w) / 2;
@@ -1644,6 +1784,11 @@ static void execute_pull_model(const char *model_name) {
     }
     chdir2root();
 
+    savetty(); /* Save terminal state for robust recovery */
+    def_prog_mode();
+    endwin();
+    clear_term();
+
     printf("\n");
     printf("┌─────────────────────────────────────────────────────────────────────┐\n");
     printf("│                            PULLING MODEL                            │\n");
@@ -1669,6 +1814,7 @@ static void execute_pull_model(const char *model_name) {
         chdir2root();
     }
 
+    resetty(); /* Restore terminal state before resuming ncurses */
     reset_prog_mode();
     clearok(stdscr, TRUE);
     refresh_data();
@@ -1716,6 +1862,14 @@ static void handle_input_dialog_keys(int *active_flag, //
     int len = (int)strlen(st.dialog_input);
 
     switch (ch) {
+        case KEY_RESIZE:
+            getmaxyx(stdscr, rows, cols);
+            resize_term(rows, cols);
+            full_refresh();
+            draw_fn();
+            refresh();
+            break;
+
         case KEY_LEFT:
             if (st.dialog_cursor > 0) {
                 st.dialog_cursor--;
@@ -1836,7 +1990,8 @@ static void handle_pull_dialog_keys(void) {
 static void search_dialog_enter(void) {
     if (strlen(st.dialog_input)) {
         snprintf(st.filter, MAX_NAME_LEN, "%s", st.dialog_input);
-        st.sel_ls_model = 0;
+        st.sel_ls_model     = 0;
+        st.ls_scroll_offset = 0;
     } else {
         st.filter[0] = '\0';
     }
@@ -1866,6 +2021,14 @@ static void handle_confirm_dialog_keys(void) {
         return;
     }
     switch (ch) {
+        case KEY_RESIZE:
+            getmaxyx(stdscr, rows, cols);
+            resize_term(rows, cols);
+            full_refresh();
+            draw_confirm_dialog();
+            refresh();
+            break;
+
         case KEY_LEFT:
             st.confirm_choice = 1;
             draw_confirm_dialog();
@@ -2021,16 +2184,20 @@ static void handle_main_keys(int ch) {
 
         case KEY_LEFT:
             if (st.tab == 1) {
-                st.tab          = 0;
-                st.sel_ls_model = 0;
+                st.tab              = 0;
+                st.sel_ls_model     = 0;
+                st.ls_scroll_offset = 0;
+                st.filter[0]        = '\0';
                 full_refresh();
             }
             break;
 
         case KEY_RIGHT:
             if (st.tab == 0) {
-                st.tab          = 1;
-                st.sel_ps_model = 0;
+                st.tab              = 1;
+                st.sel_ps_model     = 0;
+                st.ps_scroll_offset = 0;
+                st.filter[0]        = '\0';
                 full_refresh();
             }
             break;
@@ -2159,7 +2326,9 @@ static int initialize_app(void) {
     }
 
     memset(&st, 0, sizeof(st));
-    st.dialog_insert = 1; // default to insert mode
+    st.dialog_insert    = 1; // default to insert mode
+    st.ls_scroll_offset = 0;
+    st.ps_scroll_offset = 0;
     pthread_mutex_init(&st.mutex, NULL);
     init_ncurses();
 
@@ -2199,6 +2368,14 @@ int main(void) {
 
         if (st.show_info) {
             ch = getch();
+            if (ch == KEY_RESIZE) {
+                getmaxyx(stdscr, rows, cols);
+                resize_term(rows, cols);
+                full_refresh();
+                draw_info_dialog();
+                refresh();
+                continue;
+            }
             if (ch != ERR) {
                 st.show_info = 0;
                 full_refresh();
