@@ -13,6 +13,9 @@ A terminal-based user interface (TUI) for managing Ollama models. Built with C a
 - **Search/Filter**: Quickly find models by name
 - **Background Refresh**: Automatic data refresh in a background thread
 - **Color-coded UI**: Easy-to-read interface with color highlighting
+- **Scrollable Lists**: Navigate through large model lists that exceed terminal height with scroll indicators (▲/▼)
+- **Robust Terminal Recovery**: Safe terminal state handling during external shell operations (e.g., model pulls)
+- **Ollama Login/Logout**: Manage Ollama authentication directly from the TUI
 
 ![Figure 01](./docs/images/Figure_01.png)
 
@@ -89,6 +92,7 @@ gollama_manager
 
 - **UP/DOWN** - Navigate through the model list
 - **LEFT/RIGHT** - Switch between "Installed Models" and "Running Models" tabs
+- **Tab switching clears the search filter** automatically
 
 ### Model Operations
 
@@ -97,10 +101,21 @@ gollama_manager
 - **S** - Stop the selected running model (with confirmation)
 - **P** - Pull a new model (opens input dialog)
 
+### Search & Filter
+
+- **/** - Open search dialog to filter models by name (case-insensitive)
+- The filter is applied in real-time to the installed models list
+- Scroll indicators (▲/▼) appear when filtered results exceed terminal height
+
+### Authentication
+
+- **L** - Login to or logout from Ollama
+  - Displays the signed-in username in the status bar
+  - Detects SSH sessions where browser-based login is unavailable
+
 ### Other
 
-- **R** - Refresh model data
-- **/** - Open search dialog to filter models
+- **R** - Refresh model data in a background thread
 - **Q** - Quit the application
 
 ### Dialog Controls
@@ -112,6 +127,13 @@ gollama_manager
 - **HOME/END** - Jump to start/end of input field
 - **DELETE** - Delete character at cursor position
 - **INSERT** - Toggle insert/overwrite mode
+
+### Scrolling in Long Lists
+
+When a model list exceeds the visible terminal height:
+- **UP/DOWN** automatically scrolls the viewport to keep the selection visible
+- **▲** indicator at the top-right of the list shows more items above
+- **▼** indicator at the bottom-right of the list shows more items below
 
 ## Building from Source
 
@@ -141,11 +163,19 @@ gollama_manager
 
 ## Technical Details
 
-- **Language**: C
-- **UI Framework**: ncursesw
-- **Threading**: pthread
+- **Language**: C (C99/C11 compatible, no VLAs)
+- **UI Framework**: ncursesw (wide-character / UTF-8 support)
+- **Threading**: pthread with mutex-protected shared state
 - **Build System**: CMake
 - **Compiler**: GCC with strict warnings enabled
+
+### Robustness Improvements
+
+- **Reentrant string parsing**: Uses `strtok_r` instead of `strtok` for thread-safe tokenization
+- **Scroll offset management**: Viewport automatically adjusts when model counts change during refresh
+- **Terminal state recovery**: `savetty()` / `resetty()` guards around shell escapes prevent terminal corruption
+- **Format-agnostic parsing**: Size fields tolerate both single-token (`4.5GB`) and two-token (`4.5 GB`) formats, as well as cloud model placeholders (`-`)
+- **Resize handling**: All dialogs (pull, search, confirm, info) respond correctly to terminal resize events
 
 ## License
 
@@ -192,3 +222,10 @@ Ensure you have GCC and CMake installed:
 gcc --version
 cmake --version
 ```
+
+### Terminal display corruption after pull
+
+If the terminal appears corrupted after a model pull operation:
+- Press **Q** to quit and restart gOllamaManager
+- The application uses `resetty()` / `savetty()` to minimize this risk
+- Avoid interrupting (Ctrl+C) the pull subprocess
