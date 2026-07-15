@@ -1776,15 +1776,8 @@ static void execute_pull_model(const char *model_name) {
     char cmd[MAX_LINE_LEN];
     snprintf(cmd, sizeof(cmd), "ollama pull %s", model_name);
 
-    char old_cwd[4096];
-    int  have_old = 0;
-
-    if (getcwd(old_cwd, sizeof(old_cwd)) != NULL) {
-        have_old = 1;
-    }
     chdir2root();
 
-    savetty(); /* Save terminal state for robust recovery */
     def_prog_mode();
     endwin();
     clear_term();
@@ -1808,15 +1801,9 @@ static void execute_pull_model(const char *model_name) {
     fflush(stdout);
     getchar();
 
-    if (have_old) {
-        chdir2prev(old_cwd);
-    } else {
-        chdir2root();
-    }
-
-    resetty(); /* Restore terminal state before resuming ncurses */
     reset_prog_mode();
-    clearok(stdscr, TRUE);
+    keypad(stdscr, TRUE);
+    flushinp();
     refresh_data();
     st.pulling = 0;
     memset(st.dialog_input, 0, sizeof(st.dialog_input));
@@ -1970,9 +1957,6 @@ static void pull_dialog_enter(void) {
         st.show_dialog = 0;
         full_refresh();
 
-        def_prog_mode();
-        endwin();
-        clear_term();
         execute_pull_model(st.dialog_input);
     }
 }
