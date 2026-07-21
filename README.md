@@ -98,6 +98,7 @@ gollama_manager
 
 - **I** - Show detailed information about the selected model
 - **D** - Delete the selected model (with confirmation)
+- **R** - Run the selected model (exits TUI, runs ollama run, then returns)
 - **S** - Stop the selected running model (with confirmation)
 - **P** - Pull a new model (opens input dialog)
 

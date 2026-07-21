@@ -1191,6 +1191,7 @@ static void draw_hints_bar(void) {
     // Tab 0 only (and requires installed models)
     print_hint(&x, y, "[I] Info", st.tab == 0 && st.ls_model_cnt);
     print_hint(&x, y, "[D] Delete", st.tab == 0 && st.ls_model_cnt);
+    print_hint(&x, y, "[R] Run", st.tab == 0 && st.ls_model_cnt);
     // Tab 1 only (and requires running models)
     print_hint(&x, y, "[S] Stop", st.tab == 1 && st.ps_model_cnt);
     // Always available
@@ -1815,6 +1816,52 @@ static void execute_pull_model(const char *model_name) {
 }
 
 /**
+ * @brief Execute the ollama run command for a model.
+ *
+ * @param[in] model_name The name of the model to run.
+ */
+static void execute_run_model(const char *model_name) {
+    char cmd[MAX_LINE_LEN];
+    snprintf(cmd, sizeof(cmd), "ollama run %s", model_name);
+
+    chdir2root();
+
+    def_prog_mode();
+    endwin();
+    clear_term();
+
+    printf("\n");
+    printf("┌─────────────────────────────────────────────────────────────────────┐\n");
+    printf("│                            RUNNING MODEL                            │\n");
+    printf("└─────────────────────────────────────────────────────────────────────┘\n");
+    printf("\n");
+    printf("Model: %s\n", model_name);
+    printf("───────────────────────────────────────────────────────────────────────\n");
+    fflush(stdout);
+
+    int ret = system(cmd);
+    if (ret == 0)
+        printf("[SUCCESS] Model '%s' run completed.\n", model_name);
+    else
+        printf("[ERROR] Failed to run model '%s'\n", model_name);
+
+    printf("\nPress ENTER to continue...");
+    fflush(stdout);
+    getchar();
+
+    reset_prog_mode();
+    keypad(stdscr, TRUE);
+    flushinp();
+    update_data();
+    memset(st.dialog_input, 0, sizeof(st.dialog_input));
+    st.dialog_cursor = 0;
+    st.dialog_insert = 1;
+    snprintf(st.status, sizeof(st.status), "Run complete");
+    snprintf(st.logmsg, sizeof(st.logmsg), "Ran model: %s", model_name);
+    full_update();
+}
+
+/**
  * @brief Shared key-handler core for text-input dialogs.
  *
  * Processes one keystroke for any dialog that uses @c st.dialog_input. The
@@ -2122,6 +2169,16 @@ static void handle_main_keys(int ch) {
             pthread_create(&tid, NULL, update_thread, NULL);
             pthread_detach(tid);
         } break;
+
+        case 'r':
+        case 'R':
+            if (st.tab == 0 && st.ls_model_cnt) {
+                char name_buf[MAX_NAME_LEN];
+                if (get_selected_model_name(name_buf)) {
+                    execute_run_model(name_buf);
+                }
+            }
+            break;
 
         case 'i':
         case 'I':
