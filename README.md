@@ -6,16 +6,17 @@ A terminal-based user interface (TUI) for managing Ollama models. Built with C a
 
 - **View Installed Models**: Browse all installed Ollama models with details (name, ID, size, modification date)
 - **View Running Models**: Monitor currently running models with processor usage and expiration time
-- **Pull Models**: Download new models from the Ollama registry
-- **Delete Models**: Remove installed models with confirmation
-- **Stop Models**: Stop running models with confirmation
 - **Model Information**: View detailed information about any model
+- **Delete Models**: Remove installed models with confirmation
+- **Run Models**: Run an installed model in a new TUI session
+- **Stop Models**: Stop running models with confirmation
+- **Pull Models**: Download new models from the Ollama registry
 - **Search/Filter**: Quickly find models by name
+- **Ollama Login/Logout**: Manage Ollama authentication directly from the TUI
 - **Background Update**: Automatic data update in a background thread
 - **Color-coded UI**: Easy-to-read interface with color highlighting
 - **Scrollable Lists**: Navigate through large model lists that exceed terminal height with scroll indicators (▲/▼)
 - **Robust Terminal Recovery**: Safe terminal state handling during external shell operations (e.g., model pulls)
-- **Ollama Login/Logout**: Manage Ollama authentication directly from the TUI
 
 ![Figure 01](./docs/images/Figure_01.png)
 
@@ -28,6 +29,10 @@ A terminal-based user interface (TUI) for managing Ollama models. Built with C a
 ![Figure 05](./docs/images/Figure_05.png)
 
 ![Figure 06](./docs/images/Figure_06.png)
+
+![Figure 06](./docs/images/Figure_07.png)
+
+![Figure 06](./docs/images/Figure_08.png)
 
 ## Requirements
 
