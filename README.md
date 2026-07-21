@@ -11,7 +11,7 @@ A terminal-based user interface (TUI) for managing Ollama models. Built with C a
 - **Stop Models**: Stop running models with confirmation
 - **Model Information**: View detailed information about any model
 - **Search/Filter**: Quickly find models by name
-- **Background Refresh**: Automatic data refresh in a background thread
+- **Background Update**: Automatic data update in a background thread
 - **Color-coded UI**: Easy-to-read interface with color highlighting
 - **Scrollable Lists**: Navigate through large model lists that exceed terminal height with scroll indicators (▲/▼)
 - **Robust Terminal Recovery**: Safe terminal state handling during external shell operations (e.g., model pulls)
@@ -115,7 +115,7 @@ gollama_manager
 
 ### Other
 
-- **R** - Refresh model data in a background thread
+- **U** - Update model data in a background thread
 - **Q** - Quit the application
 
 ### Dialog Controls

@@ -126,8 +126,8 @@ static struct {
     int             pulling;                      /**< Non-zero if a pull operation is in progress */
     char            status[MAX_LOG_LEN];          /**< Status message displayed in header */
     char            logmsg[MAX_LOG_LEN];          /**< Log message displayed at bottom */
-    int             need_refresh;                 /**< Set to 1 to request a UI refresh (protected by mutex) */
-    int             refreshing;                   /**< Non-zero if a refresh thread is running (protected by mutex) */
+    int             need_update;                  /**< Set to 1 to request a UI update (protected by mutex) */
+    int             updating;                     /**< Non-zero if an update thread is running (protected by mutex) */
     int             show_dialog;                  /**< Pull dialog active flag */
     int             show_info;                    /**< Info dialog active flag */
     int             show_search;                  /**< Search dialog active flag */
@@ -932,7 +932,7 @@ static bool fetch_username(void) {
 }
 
 // -----------------------------------------------------------------------------
-// Data Refresh (no ncurses calls – thread safe with brief lock)
+// Data Update (no ncurses calls – thread safe with brief lock)
 // -----------------------------------------------------------------------------
 
 /**
@@ -965,12 +965,12 @@ static void *ps_thread(void *arg) {
 }
 
 /**
- * @brief Refresh model and running data by invoking ollama commands.
+ * @brief Update model and running data by invoking ollama commands.
  *
  * This function fetches fresh data into local buffers, then locks the mutex
  * only to memcpy the results into the global state. This minimizes UI stutter.
  */
-static void refresh_data(void) {
+static void update_data(void) {
     LsModel local_ls_models[MAX_MODELS];
     PsModel local_ps_models[MAX_MODELS];
     int     local_ls_model_cnt = 0;
@@ -1031,8 +1031,8 @@ static void refresh_data(void) {
     st.rcol_proc    = local_rcol_proc;
     st.rcol_ctx     = local_rcol_ctx;
     st.rcol_exp     = local_rcol_exp;
-    st.need_refresh = 1; /* signal main loop to redraw */
-    st.refreshing   = 0; /* refresh thread finished */
+    st.need_update  = 1; /* signal main loop to redraw */
+    st.updating     = 0; /* update thread finished */
 
     /* Defensive: clamp scroll offsets after data changes */
     if (st.ls_scroll_offset >= st.ls_model_cnt) {
@@ -1195,7 +1195,7 @@ static void draw_hints_bar(void) {
     print_hint(&x, y, "[S] Stop", st.tab == 1 && st.ps_model_cnt);
     // Always available
     print_hint(&x, y, "[P] Pull", true);
-    print_hint(&x, y, "[R] Refresh", true);
+    print_hint(&x, y, "[U] Update", true);
     print_hint(&x, y, "[/] Search", true);
     // Login/Logout
     print_hint(&x, y, st.username[0] ? "[L] Logout" : "[L] Login", true);
@@ -1711,17 +1711,17 @@ static void draw_confirm_dialog(void) {
 }
 
 // -----------------------------------------------------------------------------
-// Full Refresh and Logging
+// Full Update and Logging
 // -----------------------------------------------------------------------------
 
 /**
- * @brief Perform a full screen refresh (redraw everything).
+ * @brief Perform a full screen update (redraw everything).
  *
  * Uses werase() to clear the logical screen without forcing a physical clear,
  * then batches all updates with wnoutrefresh() and doupdate() to eliminate
  * flicker.
  */
-static void full_refresh(void) {
+static void full_update(void) {
     werase(stdscr); // clear logical screen only
     draw_header();
     draw_content();
@@ -1748,18 +1748,18 @@ static void log_msg(const char *fmt, ...) {
 }
 
 // -----------------------------------------------------------------------------
-// Background Refresh Thread
+// Background Update Thread
 // -----------------------------------------------------------------------------
 
 /**
- * @brief Background thread function to refresh data without blocking the UI.
+ * @brief Background thread function to update data without blocking the UI.
  *
  * @param[in] arg Unused thread argument.
  * @return NULL.
  */
-static void *refresh_thread(void *arg) {
-    (void)arg;      /* unused */
-    refresh_data(); /* this sets st.need_refresh and clears st.refreshing */
+static void *update_thread(void *arg) {
+    (void)arg;     /* unused */
+    update_data(); /* this sets st.need_update and clears st.updating */
     return NULL;
 }
 
@@ -1804,14 +1804,14 @@ static void execute_pull_model(const char *model_name) {
     reset_prog_mode();
     keypad(stdscr, TRUE);
     flushinp();
-    refresh_data();
+    update_data();
     st.pulling = 0;
     memset(st.dialog_input, 0, sizeof(st.dialog_input));
     st.dialog_cursor = 0;
     st.dialog_insert = 1;
     snprintf(st.status, sizeof(st.status), "Pull complete");
     snprintf(st.logmsg, sizeof(st.logmsg), "Pulled model: %s", model_name);
-    full_refresh();
+    full_update();
 }
 
 /**
@@ -1822,7 +1822,7 @@ static void execute_pull_model(const char *model_name) {
  *  - @p draw_fn redraws the dialog (called after BACKSPACE / printable key).
  *  - @p enter_fn called when ENTER is pressed with a non-empty input buffer;
  *    responsible for consuming the input and closing the dialog. ESC always
- *    clears the buffer and triggers a full_refresh().
+ *    clears the buffer and triggers a full_update().
  *
  * @param[in] active_flag Pointer to the st flag that keeps this dialog open
  * (set to 0 on ESC so the caller's loop exits cleanly).
@@ -1838,7 +1838,7 @@ static void handle_input_dialog_keys(int *active_flag, //
         memset(st.dialog_input, 0, sizeof(st.dialog_input));
         st.dialog_cursor = 0;
         st.dialog_insert = 1;
-        full_refresh();
+        full_update();
         return;
     }
     if (ch == 10 || ch == 13) { // ENTER
@@ -1852,7 +1852,7 @@ static void handle_input_dialog_keys(int *active_flag, //
         case KEY_RESIZE:
             getmaxyx(stdscr, rows, cols);
             resize_term(rows, cols);
-            full_refresh();
+            full_update();
             draw_fn();
             refresh();
             break;
@@ -1955,7 +1955,7 @@ static void pull_dialog_enter(void) {
     if (strlen(st.dialog_input)) {
         st.pulling     = 1;
         st.show_dialog = 0;
-        full_refresh();
+        full_update();
 
         execute_pull_model(st.dialog_input);
     }
@@ -1983,7 +1983,7 @@ static void search_dialog_enter(void) {
     memset(st.dialog_input, 0, sizeof(st.dialog_input));
     st.dialog_cursor = 0;
     st.dialog_insert = 1;
-    full_refresh();
+    full_update();
     log_msg("Search filter: %s", strlen(st.filter) ? st.filter : "(cleared)");
 }
 
@@ -2001,14 +2001,14 @@ static void handle_confirm_dialog_keys(void) {
     int ch = getch();
     if (ch == 27) { // ESCAPE
         st.confirm_active = 0;
-        full_refresh();
+        full_update();
         return;
     }
     switch (ch) {
         case KEY_RESIZE:
             getmaxyx(stdscr, rows, cols);
             resize_term(rows, cols);
-            full_refresh();
+            full_update();
             draw_confirm_dialog();
             refresh();
             break;
@@ -2031,15 +2031,15 @@ static void handle_confirm_dialog_keys(void) {
         case 10:
         case 13: // ENTER
             st.confirm_active = 0;
-            full_refresh();
+            full_update();
             if (st.confirm_choice == 1) {
                 if (st.confirm_is_delete) {
                     remove_model(st.confirm_target);
                 } else {
                     stop_model(st.confirm_target);
                 }
-                refresh_data();
-                full_refresh();
+                update_data();
+                full_update();
             }
             break;
         default:
@@ -2103,23 +2103,23 @@ static void handle_main_keys(int ch) {
             printf("\nGoodbye.\n");
             exit(0);
 
-        case 'r':
-        case 'R': {
+        case 'u':
+        case 'U': {
             pthread_mutex_lock(&st.mutex);
-            if (st.refreshing) {
+            if (st.updating) {
                 pthread_mutex_unlock(&st.mutex);
-                log_msg("Refresh already in progress...");
+                log_msg("Update already in progress...");
                 break;
             }
-            st.refreshing = 1;
+            st.updating = 1;
             pthread_mutex_unlock(&st.mutex);
 
-            snprintf(st.status, sizeof(st.status), "Refreshing...");
+            snprintf(st.status, sizeof(st.status), "Updating...");
             draw_header();
             refresh();
 
             pthread_t tid;
-            pthread_create(&tid, NULL, refresh_thread, NULL);
+            pthread_create(&tid, NULL, update_thread, NULL);
             pthread_detach(tid);
         } break;
 
@@ -2172,7 +2172,7 @@ static void handle_main_keys(int ch) {
                 st.sel_ls_model     = 0;
                 st.ls_scroll_offset = 0;
                 st.filter[0]        = '\0';
-                full_refresh();
+                full_update();
             }
             break;
 
@@ -2182,7 +2182,7 @@ static void handle_main_keys(int ch) {
                 st.sel_ps_model     = 0;
                 st.ps_scroll_offset = 0;
                 st.filter[0]        = '\0';
-                full_refresh();
+                full_update();
             }
             break;
 
@@ -2286,7 +2286,7 @@ static void handle_main_keys(int ch) {
         case KEY_RESIZE:
             getmaxyx(stdscr, rows, cols);
             resize_term(rows, cols);
-            full_refresh();
+            full_update();
             break;
 
         default:
@@ -2316,10 +2316,10 @@ static int initialize_app(void) {
     pthread_mutex_init(&st.mutex, NULL);
     init_ncurses();
 
-    refresh_data();
-    snprintf(st.status, sizeof(st.status), "Refreshed");
+    update_data();
+    snprintf(st.status, sizeof(st.status), "Updated");
     snprintf(st.logmsg, sizeof(st.logmsg), "Loaded %d model(s), %d running", st.ls_model_cnt, st.ps_model_cnt);
-    full_refresh();
+    full_update();
 
     return 0;
 }
@@ -2337,17 +2337,17 @@ int main(void) {
 
     while (1) {
         pthread_mutex_lock(&st.mutex);
-        int need_refresh = st.need_refresh;
+        int need_update = st.need_update;
         pthread_mutex_unlock(&st.mutex);
 
-        if (need_refresh) {
+        if (need_update) {
             pthread_mutex_lock(&st.mutex);
-            st.need_refresh = 0;
+            st.need_update = 0;
             pthread_mutex_unlock(&st.mutex);
 
-            snprintf(st.status, sizeof(st.status), "Refreshed");
+            snprintf(st.status, sizeof(st.status), "Updated");
             snprintf(st.logmsg, sizeof(st.logmsg), "Loaded %d model(s), %d running", st.ls_model_cnt, st.ps_model_cnt);
-            full_refresh();
+            full_update();
         }
 
         if (st.show_info) {
@@ -2355,14 +2355,14 @@ int main(void) {
             if (ch == KEY_RESIZE) {
                 getmaxyx(stdscr, rows, cols);
                 resize_term(rows, cols);
-                full_refresh();
+                full_update();
                 draw_info_dialog();
                 refresh();
                 continue;
             }
             if (ch != ERR) {
                 st.show_info = 0;
-                full_refresh();
+                full_update();
             }
             continue;
         }
