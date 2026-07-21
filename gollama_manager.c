@@ -64,7 +64,7 @@
 
 #define OPTIMIZE_O2 OPTIMIZE_FUNC(2)
 #define OPTIMIZE_O3 OPTIMIZE_FUNC(3)
-#define APP_VERSION "1.3"
+#define APP_VERSION "1.4"
 
 // -----------------------------------------------------------------------------
 // `ncurses` Color Pairs
